@@ -1,0 +1,35 @@
+GROW A GARDEN 3D — SIX JARDINS IDENTIQUES
+
+LANCEMENT
+1. Décompresse le ZIP.
+2. Ouvre index.html avec Chrome ou Edge.
+3. Connexion Internet nécessaire pour Three.js et PeerJS.
+
+NOUVEAU PLAN DU JARDIN
+- Six jardins de même dimension, en deux colonnes et trois rangées.
+- Chaque jardin possède une grille identique de 9 parcelles (3 x 3).
+- Grandes allées pavées, carreaux de même taille, passerelles larges et accès dégagés.
+- Le premier jardin est ouvert ; les cinq autres s'achètent dans la MAP / NOTEBOOK.
+- Les prix des terrains sont très élevés : 1 M€, 10 M€, 100 M€, 1 Md€, 10 Md€.
+- Les terrains verrouillés sont visibles, mais on ne peut pas y planter avant de les acheter.
+- Personnage plus rapide : 20 unités/s en marche, 29 en sprint.
+- Feuilles, fruits, arbres, eau et nuages animés ; fruits et feuilles ont des mouvements de vent.
+- Les six jardins restent sur une seule grande plateforme entourée d'eau, sans pont.
+
+COMMANDES
+- Souris : déplacer le curseur pour orienter la caméra ; molette pour zoomer.
+- Clavier : ZQSD, Maj pour courir, E interagir, P ouvrir la MAP, Espace sauter.
+- Manette : joystick gauche marcher, appuyer sur joystick gauche pour courir, joystick droit caméra, A sauter/valider, X interagir, Y MAP, B fermer, LB/RB changer de graine.
+
+SAUVEGARDE
+- Sauvegarde automatique locale et trois emplacements manuels.
+- Les anciennes sauvegardes sont migrées au mieux ; les 9 premières parcelles sont conservées dans le jardin de départ.
+
+MULTIJOUEUR
+- Le menu Amis utilise PeerJS/WebRTC ; l'hôte doit rester en ligne.
+- Pour inviter de vraies personnes, publier le site en HTTPS est nécessaire.
+- Le mode multijoueur reste à tester avec deux navigateurs réels.
+
+IMPORTANT
+- Ceci est un jeu original inspiré de Grow a Garden. Il n'inclut pas les modèles, textures, animations ni scripts propriétaires originaux de Roblox. Le style visuel et les mécaniques sont recréés avec des éléments 3D originaux.
+- Les temps de pousse, les prix, les cultures et les mutations sont une sélection de notre version, pas une reproduction garantie de toutes les données Roblox.
