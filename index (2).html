@@ -1,0 +1,1157 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Grow a Garden 3D</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui,Arial;background:#8bd7f5;color:white}canvas{display:block}
+#hud{position:fixed;top:12px;left:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:2}.pill{background:#163d2ddd;border:1px solid #b6e9a4;border-radius:12px;padding:9px 13px;font-weight:800}
+#actions{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:96%;z-index:3}
+button{border:0;border-radius:12px;padding:11px 14px;background:#ffe08a;color:#263b22;font-weight:900;cursor:pointer}
+#panel{display:none;position:fixed;z-index:5;top:50%;left:50%;transform:translate(-50%,-50%);width:min(480px,92vw);max-height:78vh;overflow:auto;background:#173d2bf2;border:2px solid #b8efa6;border-radius:20px;padding:18px;box-shadow:0 12px 50px #0009}
+.item{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#ffffff18;border-radius:12px;padding:10px;margin:8px 0}.item small{display:block;color:#d1e8d1}
+#toast{display:none;position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:4;background:#173d2b;padding:10px 16px;border-radius:12px;border:1px solid #b8efa6;text-align:center;max-width:90vw;box-shadow:0 8px 30px #0005}#cameraHint{display:none}button{box-shadow:0 4px 0 #9c762f55;transition:transform .12s,filter .12s}.pad-focus{outline:4px solid #fff36b!important;filter:brightness(1.18);transform:scale(1.04)}button:hover{filter:brightness(1.08);transform:translateY(-1px)}button:active{transform:translateY(2px);box-shadow:0 1px 0 #9c762f55}
+#start{position:fixed;inset:0;z-index:10;background:#123b2bdc;display:grid;place-items:center;padding:18px;text-align:center}
+#startbox{max-width:560px;background:#24583b;border:2px solid #b8efa6;border-radius:24px;padding:28px;box-shadow:0 20px 70px #0008}
+#start h1{font-size:clamp(30px,7vw,50px);margin:0 0 8px}#loadingTrack{height:14px;background:#153d2b;border:1px solid #b8efa6;border-radius:20px;overflow:hidden;margin:18px 0 8px}#loadingFill{height:100%;width:0;background:linear-gradient(90deg,#9be15d,#ffe08a);border-radius:20px;transition:width .1s linear}#loadingArea,#readyArea{min-width:min(420px,75vw)}#start p{line-height:1.5}
+@media(max-width:650px){#actions{bottom:8px}button{padding:9px 10px}}
+</style></head><body>
+<div id="hud"><div class="pill">💶 <span id="cash">5</span></div><div class="pill">💎 <span id="gems">0</span></div><div class="pill">🌱 <span id="seednum">0</span></div><div class="pill" id="selectedSeed">Graine équipée : aucune</div><div class="pill" id="harvestStatus">🧺 Récolte : 0 €</div><div class="pill" id="weatherStatus">☀️ Journée claire</div><div class="pill" id="saveStatus">💾 Sauvegarde automatique</div><div class="pill" id="padStatus">🎮 Manette : non détectée</div><div class="pill" id="onlineStatus">👥 Solo</div></div>
+<div id="actions"><button id="mapBtn">🗺️ MAP / NOTEBOOK</button><button id="interactBtn">🌱 INTERAGIR (E)</button></div>
+<div id="cameraHint">🖱️ Garde la souris à gauche/droite pour tourner · En haut/bas pour regarder · Centre = arrêt · Molette = zoom</div><div id="toast"></div><div id="panel"><button id="close" style="float:right">✕</button><div id="content"></div></div>
+<div id="start"><div id="startbox">
+<h1>🌻 GROW A GARDEN 3D</h1>
+<div id="loadingArea"><p id="loadingText">Préparation de ton jardin...</p><div id="loadingTrack"><div id="loadingFill"></div></div><small id="loadingPercent">0 %</small></div>
+<div id="readyArea" style="display:none"><p>Ton petit coin de paradis est prêt !</p><button id="play">🌼 JOUER</button><p><small>Clavier : ZQSD, E, P, Espace · Manette : joystick gauche = marcher, joystick droit = caméra, ← / → = choisir une graine, A = sauter/confirmer, X = planter/récolter/valider, Y = carte, B = fermer · Molette = zoom</small></p></div>
+</div></div>
+<button id="musicBtn" style="display:none;position:fixed;right:14px;top:14px;z-index:6">🔊 Musique</button>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+(()=>{
+if(!window.THREE){document.getElementById('startbox').innerHTML='<h2>Connexion nécessaire</h2><p>Le moteur 3D se charge depuis Internet. Vérifie ta connexion puis actualise la page.</p>';return;}
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x8bd7f5);scene.fog=new THREE.Fog(0x8bd7f5,95,260);
+const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,420);camera.position.set(0,2,13);
+const renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.8));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;document.getElementById('game')?.appendChild(renderer.domElement);
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xe7faff,0x526b39,2.25));
+const fillLight=new THREE.DirectionalLight(0xd9f5ff,.55);fillLight.position.set(28,18,-24);scene.add(fillLight);
+const sun=new THREE.DirectionalLight(0xfff0cf,2.1);sun.position.set(-25,40,25);sun.castShadow=true;sun.shadow.mapSize.set(3072,3072);scene.add(sun);
+const M=c=>new THREE.MeshStandardMaterial({color:c,roughness:.72,metalness:.02});
+const solids=[];
+const animatedTrees=[],animatedPlants=[],animatedClouds=[],sparkles=[];
+function addBoxSolid(x,z,hx,hz){solids.push({kind:'box',x,z,hx,hz})}
+function addCircleSolid(x,z,r){solids.push({kind:'circle',x,z,r})}
+const grass=M(0x68b957),wood=M(0x87502d),plank=M(0xb67a45),stone=M(0xc6c5ad),water=M(0x28a9d0),soil=M(0x69432b),leaf=M(0x35a54a),pink=M(0xff82c6),gold=M(0xffd56b);
+function cube(x,y,z,sx,sy,sz,mat){let o=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),mat);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;scene.add(o);return o}
+function ball(x,y,z,r,mat){let o=new THREE.Mesh(new THREE.SphereGeometry(r,16,12),mat);o.position.set(x,y,z);o.castShadow=true;scene.add(o);return o}
+
+// Grande plateforme-jardin unique, entourée d'eau : aucun pont à traverser.
+const waterMat=new THREE.MeshPhysicalMaterial({color:0x27a9d4,roughness:.22,metalness:.05,clearcoat:.95,clearcoatRoughness:.12});
+const waterPlane=cube(0,-2.95,0,280,.30,240,waterMat);
+const waterSheen=new THREE.Mesh(new THREE.PlaneGeometry(260,220,1,1),new THREE.MeshBasicMaterial({color:0x8de9ec,transparent:true,opacity:.055,side:THREE.DoubleSide}));waterSheen.rotation.x=-Math.PI/2;waterSheen.position.y=-2.78;scene.add(waterSheen);
+const grassCanvas=document.createElement('canvas');grassCanvas.width=512;grassCanvas.height=512;
+const gctx=grassCanvas.getContext('2d');gctx.fillStyle='#72bd50';gctx.fillRect(0,0,512,512);
+for(let i=0;i<23000;i++){
+  const x=Math.random()*512,y=Math.random()*512;
+  const shade=Math.random();
+  gctx.fillStyle=shade<.33?'rgba(38,103,40,.13)':shade<.66?'rgba(190,221,103,.14)':'rgba(239,241,151,.09)';
+  gctx.fillRect(x,y,1+Math.random()*2,1+Math.random()*2);
+}
+for(let i=0;i<900;i++){
+  const x=Math.random()*512,y=Math.random()*512;
+  gctx.strokeStyle='rgba(35,104,39,.20)';gctx.lineWidth=1;
+  gctx.beginPath();gctx.moveTo(x,y);gctx.lineTo(x+Math.random()*3-1.5,y-2-Math.random()*5);gctx.stroke();
+}
+const grassTexture=new THREE.CanvasTexture(grassCanvas);
+grassTexture.wrapS=grassTexture.wrapT=THREE.RepeatWrapping;grassTexture.repeat.set(10,8);grassTexture.colorSpace=THREE.SRGBColorSpace;
+const grassTop=new THREE.MeshStandardMaterial({map:grassTexture,roughness:.96,color:0xffffff});
+const cliffMat=new THREE.MeshStandardMaterial({color:0x79553b,roughness:1});
+const shoreShape=new THREE.Shape();
+shoreShape.moveTo(-82,-60);
+shoreShape.bezierCurveTo(-103,-60,-108,-44,-104,-27);
+shoreShape.bezierCurveTo(-111,-10,-106,15,-108,31);
+shoreShape.bezierCurveTo(-106,52,-89,65,-67,66);
+shoreShape.bezierCurveTo(-38,72,-14,67,8,69);
+shoreShape.bezierCurveTo(34,68,61,72,82,60);
+shoreShape.bezierCurveTo(100,50,104,30,98,12);
+shoreShape.bezierCurveTo(106,-8,102,-31,100,-45);
+shoreShape.bezierCurveTo(96,-61,79,-68,57,-68);
+shoreShape.bezierCurveTo(27,-73,4,-67,-20,-70);
+shoreShape.bezierCurveTo(-48,-69,-65,-71,-82,-60);
+shoreShape.closePath();
+const islandGeometry=new THREE.ExtrudeGeometry(shoreShape,{depth:3,bevelEnabled:false,steps:1,curveSegments:20});
+islandGeometry.rotateX(-Math.PI/2);
+const island=new THREE.Mesh(islandGeometry,[cliffMat,grassTop]);
+island.position.y=-3;island.receiveShadow=true;island.castShadow=true;scene.add(island);
+const platformPolygon=shoreShape.getPoints(120).map(p=>({x:p.x,z:-p.y}));
+// Rochers sur la falaise, visibles depuis le bord de la plateforme.
+const shoreRockMat=M(0x8a755d);
+const shorePoints=shoreShape.getPoints(120);
+for(let i=0;i<shorePoints.length;i+=3){
+  const p=shorePoints[i];
+  const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.8+Math.random()*.7,0),shoreRockMat);
+  rock.position.set(p.x,-1.65,-p.y);rock.scale.set(1.25,.9,1.15);rock.rotation.set(Math.random()*.35,Math.random()*6,Math.random()*.35);
+  rock.castShadow=true;rock.receiveShadow=true;scene.add(rock);
+}
+
+// Six jardins strictement identiques, chacun avec 9 parcelles au même format.
+// Ils sont disposés en deux colonnes et trois rangées autour de grandes allées.
+const plots=[];
+const gardenCenters=[
+  {x:-45,z:40},{x:45,z:40},
+  {x:-45,z:0},{x:45,z:0},
+  {x:-45,z:-40},{x:45,z:-40}
+];
+const gardenSigns=[];
+const gardenTileMaterials=[];
+const gardenCosts=[1000000,10000000,100000000,1000000000,10000000000];
+
+function makePavedPath(cx,cz,width,depth){
+  cube(cx,-.015,cz,width,.13,depth,stone);
+  const mats=[M(0xc7c5b5),M(0xd5d2c1),M(0xbab9ab),M(0xd0cdbd)];
+  let index=0;
+  const step=3.35,tile=3.12;
+  for(let x=cx-width/2+step/2;x<cx+width/2-step/2;x+=step){
+    for(let z=cz-depth/2+step/2;z<cz+depth/2-step/2;z+=step){
+      const p=cube(x,.09,z,tile,.13,tile,mats[index++%mats.length]);
+      p.castShadow=false;p.receiveShadow=true;
+      // Petit joint d'ombre entre les dalles pour un chemin pavé lisible.
+    }
+  }
+}
+// Grande allée centrale et deux allées transversales.
+makePavedPath(0,0,10,120);
+makePavedPath(0,-20,174,8);
+makePavedPath(0,20,174,8);
+// Allées de desserte entre l'avenue centrale et les entrées de chaque jardin.
+for(const z of [40,0,-40]){
+  makePavedPath(-15,z,30,7.5);
+  makePavedPath(15,z,30,7.5);
+}
+// Grande place devant les trois comptoirs.
+makePavedPath(0,-62,68,6);
+
+function makeGardenArch(cx,cz,side,index){
+  const innerX=cx+side*20;
+  for(const zOff of [-5.5,5.5]){
+    cube(innerX,.95,cz+zOff,.38,1.9,.38,wood);
+    ball(innerX,1.95,cz+zOff,.24,gold);
+  }
+  const lintel=cube(innerX,2.0,cz,.42,.28,11.4,wood);
+  const trim=cube(innerX,2.17,cz,.48,.12,11.1,gold);
+}
+function makeGarden(index){
+  const c=gardenCenters[index],cx=c.x,cz=c.z;
+  // Même emprise de terrain pour les six jardins.
+  cube(cx,.015,cz,41,.16,33,grass);
+  // Bordures basses en bois, avec une grande entrée tournée vers l'allée.
+  for(const zOff of [-16,16]){
+    cube(cx,.48,cz+zOff,40,.82,.38,wood);
+    addBoxSolid(cx,cz+zOff,20,.24);
+  }
+  for(const side of [-1,1]){
+    const isInner=(cx<0&&side===1)||(cx>0&&side===-1);
+    if(isInner){
+      for(const zOff of [-10.5,10.5]){
+        cube(cx+side*20,.48,cz+zOff,.38,.82,11,wood);
+        addBoxSolid(cx+side*20,cz+zOff,.24,5.5);
+      }
+    }else{
+      cube(cx+side*20,.48,cz,.38,.82,32,wood);
+      addBoxSolid(cx+side*20,cz,.24,16);
+    }
+  }
+  makeGardenArch(cx,cz,cx<0?1:-1,index);
+  const sign=makeTextSprite('');
+  sign.position.set(cx,3.0,cz-15.2);
+  sign.scale.set(5.2,1.25,1);
+  scene.add(sign);gardenSigns[index]=sign;
+
+  const offsetsX=[-11,0,11],offsetsZ=[-8.5,0,8.5];
+  for(let r=0;r<3;r++)for(let col=0;col<3;col++){
+    const x=cx+offsetsX[col],z=cz+offsetsZ[r];
+    const bedBase=cube(x,.13,z,8.8,.34,6.6,wood);
+    const top=cube(x,.34,z,8.12,.13,5.92,soil);
+    plots.push({
+      x,z,gardenIndex:index,stage:0,obj:null,crop:null,mutations:[],
+      soilMesh:top,bedBase,readyAt:0,growStartedAt:0,growDuration:0
+    });
+    gardenTileMaterials.push(top.material);
+    addBoxSolid(x,z,4.18,3.08);
+  }
+}
+for(let i=0;i<6;i++)makeGarden(i);
+
+function updateGardenAccess(){
+  const unlocked=Math.min(5,Math.max(0,state.expansions))+1;
+  for(let i=0;i<6;i++){
+    const isOpen=i<unlocked;
+    const sign=gardenSigns[i];
+    const canvas=sign.material.map.image,ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,512,128);
+    ctx.fillStyle=isOpen?'rgba(22,75,36,.94)':'rgba(45,43,47,.94)';
+    ctx.beginPath();ctx.roundRect(8,12,496,104,24);ctx.fill();
+    ctx.strokeStyle=isOpen?'#e3f4a5':'#b2a6a1';ctx.lineWidth=6;ctx.stroke();
+    ctx.font='bold 31px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#fff';
+    const text=isOpen?`🌿 JARDIN ${i+1}`:`🔒 JARDIN ${i+1} · ${gardenCosts[i-1]?.toLocaleString('fr-FR')||''} €`;
+    ctx.fillText(text,256,66);sign.material.map.needsUpdate=true;
+    sign.material.opacity=isOpen?1:.82;
+    for(const p of plots)if(p.gardenIndex===i){
+      p.unlocked=isOpen;
+      p.soilMesh.material.color.setHex(isOpen?0x69432b:0x493b38);
+      p.bedBase.material.color.setHex(isOpen?0x87502d:0x51433f);
+    }
+  }
+}
+function ensureSavedExpansions(count){
+  state.expansions=Math.max(0,Math.min(5,Number(count)||0));
+  updateGardenAccess();
+}
+function buyGardenExpansion(){
+  if(state.expansions>=5){toast('Tes six jardins sont déjà débloqués !');return;}
+  const price=gardenCosts[state.expansions];
+  if(state.cash<price){toast('Il te faut '+price.toLocaleString('fr-FR')+' € pour acheter ce jardin.');return;}
+  state.cash-=price;
+  state.expansions++;
+  updateGardenAccess();
+  updateHud();saveGame();
+  toast('🌳 Jardin '+(state.expansions+1)+' acheté ! Tu as maintenant '+(state.expansions+1)+' jardins.');
+  openNotebook();
+}
+function makeTextSprite(text){
+  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
+  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,512,128);ctx.fillStyle='rgba(20,55,32,.90)';
+  ctx.beginPath();ctx.roundRect(8,12,496,104,24);ctx.fill();ctx.strokeStyle='#d5f6a6';ctx.lineWidth=6;ctx.stroke();
+  ctx.font='bold 35px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(text,256,66);
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false}));sprite.scale.set(3.4,.85,1);return sprite;
+}
+function updatePlotLabel(p,redraw=true){
+  if(!p.timerSprite)return;
+  if(!redraw&&p.lastLabelAt&&Date.now()-p.lastLabelAt<900)return;
+  p.lastLabelAt=Date.now();const remaining=p.stage===2?'PRÊTE À RÉCOLTER':formatDuration((p.readyAt-Date.now())/1000);
+  const mutation=p.mutations?.length?' ✨ '+cropMutationLabel(p):'';
+  const text=(p.crop||'Culture')+' · '+remaining+mutation;
+  const canvas=p.timerSprite.material.map.image;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,512,128);ctx.fillStyle='rgba(20,55,32,.92)';ctx.beginPath();ctx.roundRect(8,12,496,104,24);ctx.fill();ctx.strokeStyle='#d5f6a6';ctx.lineWidth=6;ctx.stroke();ctx.font='bold 31px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=p.stage===2?'#ffe58b':'#fff';ctx.fillText(text.length>28?text.slice(0,27)+'…':text,256,66);p.timerSprite.material.map.needsUpdate=true;
+}
+function applyPlantMutationVisual(p){
+  if(!p.fruitMesh)return;const muts=p.mutations||[];const final=muts.length?muts[muts.length-1]:null;const color=final?(mutationInfo[final]?.color||0xffffff):(cropInfo[p.crop]?.color||0xff65b4);
+  p.fruitMesh.traverse(child=>{
+    if(!child.isMesh)return;
+    child.material=M(color);
+    if(child.material.emissive){child.material.emissive=new THREE.Color(color);child.material.emissiveIntensity=final?.25:0;}
+  });
+}
+function makePlant(p,type){
+  if(p.obj){scene.remove(p.obj);const old=animatedPlants.findIndex(a=>a.group===p.obj);if(old>=0)animatedPlants.splice(old,1);}
+  if(p.timerSprite)scene.remove(p.timerSprite);
+  if(!type)return;
+  const info=cropInfo[type]||{color:0xff65b4};
+  const g=new THREE.Group(),stemMat=M(type==='Cacao'?0x80502e:0x347d3b),leafMat=M(0x31964a);
+  const stemHeight=type==='Cacao'?1.45:(type==='Fruit du dragon'?1.05:1.15);
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(.07,.15,stemHeight,9),stemMat);
+  stem.position.y=stemHeight/2;g.add(stem);
+  // Feuilles pointues et nervures, qui suivent le balancement de la plante.
+  const leafPivots=[];
+  for(let i=0;i<7;i++){
+    const angle=i*Math.PI*2/7;
+    const pivot=new THREE.Group();pivot.position.set(Math.cos(angle)*.13,.42+(i%3)*.17,Math.sin(angle)*.13);
+    const blade=new THREE.Mesh(new THREE.SphereGeometry(.48,14,10),leafMat);
+    blade.scale.set(.62,.14,.30);blade.rotation.z=-.30;blade.rotation.y=-angle;pivot.add(blade);
+    const vein=new THREE.Mesh(new THREE.CylinderGeometry(.012,.018,.62,5),M(0x9dd77a));
+    vein.rotation.z=Math.PI/2-.3;vein.rotation.y=-angle;vein.position.set(Math.cos(angle)*.07,.04,Math.sin(angle)*.07);pivot.add(vein);
+    g.add(pivot);leafPivots.push(pivot);
+  }
+  const blossom=new THREE.Group();blossom.position.y=stemHeight+.05;
+  const fruitColor=info.color;
+  const fruitMat=M(fruitColor);
+  const fruits=[];
+  const fruitCount=type==='Carotte'?1:(type==='Fraise'?4:(type==='Myrtille'?7:(type==='Tomate'?3:4)));
+  for(let i=0;i<fruitCount;i++){
+    const angle=i*2.399,fruit=new THREE.Group();
+    let mesh;
+    if(type==='Fraise'){
+      mesh=new THREE.Mesh(new THREE.ConeGeometry(.19,.31,9),fruitMat);mesh.rotation.x=Math.PI;
+    }else if(type==='Watermelon'){
+      mesh=new THREE.Mesh(new THREE.SphereGeometry(.42,16,12),M(0x3a9d43));mesh.scale.set(1.25,.75,.88);
+      for(let stripe=-1;stripe<=1;stripe++){
+        const line=new THREE.Mesh(new THREE.TorusGeometry(.36,.025,5,22),M(0x184f30));
+        line.scale.set(1.15,.76,1);line.position.x=stripe*.16;line.rotation.z=Math.PI/2;mesh.add(line);
+      }
+    }else if(type==='Cacao'){
+      mesh=new THREE.Mesh(new THREE.CapsuleGeometry(.13,.42,5,8),M(0x86502e));mesh.rotation.z=.5;
+    }else if(type==='Carotte'){
+      mesh=new THREE.Mesh(new THREE.ConeGeometry(.22,.85,10),M(0xf28d29));mesh.rotation.x=Math.PI;
+    }else if(type==='Fruit du dragon'){
+      mesh=new THREE.Mesh(new THREE.SphereGeometry(.27,16,12),M(0xe94091));mesh.scale.set(.9,1.25,.9);
+      for(let k=0;k<5;k++){
+        const a=k*Math.PI*2/5;
+        const bract=new THREE.Mesh(new THREE.ConeGeometry(.08,.42,5),M(0x45a94d));
+        bract.position.set(Math.cos(a)*.20,.18,Math.sin(a)*.20);bract.rotation.z=-Math.cos(a)*.7;mesh.add(bract);
+      }
+    }else if(type==='Myrtille'){
+      mesh=new THREE.Mesh(new THREE.SphereGeometry(.12,12,10),M(0x4f5cbd));
+      const crown=new THREE.Mesh(new THREE.CircleGeometry(.035,6),M(0xb8bded));crown.rotation.x=-Math.PI/2;crown.position.y=.115;mesh.add(crown);
+    }else if(type==='Tomate'){
+      mesh=new THREE.Mesh(new THREE.SphereGeometry(.23,16,14),M(0xe94336));mesh.scale.set(1,1,.94);
+      const calyx=new THREE.Mesh(new THREE.ConeGeometry(.12,.16,6),M(0x3b8e45));calyx.position.y=.22;mesh.add(calyx);
+    }else{
+      mesh=new THREE.Mesh(new THREE.SphereGeometry(.20,14,12),fruitMat);
+    }
+    fruit.add(mesh);
+    const radius=type==='Carotte'?.12:.42;
+    fruit.position.set(Math.cos(angle)*radius,stemHeight+.28+(i%2)*.16,Math.sin(angle)*radius);
+    blossom.add(fruit);fruits.push(fruit);
+  }
+  g.add(blossom);g.position.set(p.x,.38,p.z);scene.add(g);p.obj=g;p.fruitMesh=blossom;p.fruitMesh.visible=p.stage===2;
+  p.timerSprite=makeTextSprite('');p.timerSprite.position.set(p.x,2.8,p.z);scene.add(p.timerSprite);
+  const progress=p.readyAt?Math.max(0,Math.min(1,1-(p.readyAt-Date.now())/Math.max(1000,p.growDuration||1))):0;
+  g.scale.setScalar(p.stage===2?1:.22+progress*.78);
+  applyPlantMutationVisual(p);updatePlotLabel(p,true);
+  animatedPlants.push({group:g,phase:Math.random()*Math.PI*2,fruitGroup:blossom,leafPivots});
+}
+const flowerbed=plots;
+ // Arbres décoratifs : placés sur les côtés, sans bloquer la plateforme ni les chemins.
+function makeTree(x,z,scale=1,variant=0){
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.23*scale,.40*scale,2.7*scale,10),wood);
+  trunk.position.set(x,1.35*scale,z);trunk.castShadow=true;trunk.receiveShadow=true;scene.add(trunk);
+  // Branches angled under the canopy.
+  for(let b=0;b<4;b++){
+    const branch=new THREE.Mesh(new THREE.CylinderGeometry(.09*scale,.15*scale,1.15*scale,7),wood);
+    const a=b*Math.PI/2+.4;branch.position.set(x+Math.cos(a)*.43*scale,2.15*scale,z+Math.sin(a)*.43*scale);
+    branch.rotation.z=-Math.cos(a)*.65;branch.rotation.x=Math.sin(a)*.65;branch.castShadow=true;scene.add(branch);
+  }
+  addCircleSolid(x,z,1.1*scale);
+  const crown=new THREE.Group();crown.position.set(x,2.65*scale,z);
+  const greens=variant===0?[0x2f8744,0x3f9f4f,0x62b85d]:variant===1?[0x277b48,0x459d5b,0x65ad66]:[0x377d46,0x579c4e,0x7ab85d];
+  const clusters=9;
+  for(let i=0;i<clusters;i++){
+    const a=i*Math.PI*2/clusters;
+    const r=i===0?0:.82*scale;
+    const size=(i===0?1.15:.72+Math.random()*.16)*scale;
+    const leafball=new THREE.Mesh(new THREE.SphereGeometry(size,18,14),M(greens[i%greens.length]));
+    leafball.scale.set(1.1,.88,.98);leafball.position.set(Math.cos(a)*r,.2*scale+(i%3)*.25*scale,Math.sin(a)*r);
+    leafball.castShadow=true;leafball.receiveShadow=true;crown.add(leafball);
+  }
+  // A few small fruit details on some trees.
+  if(variant===1||variant===2){
+    const fruitMat=M(variant===1?0xe54d3d:0xe8c34d);
+    for(let i=0;i<4;i++){
+      const a=i*Math.PI/2+.3;const fruit=new THREE.Mesh(new THREE.SphereGeometry(.14*scale,10,8),fruitMat);
+      fruit.position.set(Math.cos(a)*.85*scale,.1*scale+(i%2)*.3*scale,Math.sin(a)*.85*scale);crown.add(fruit);
+    }
+  }
+  scene.add(crown);animatedTrees.push({group:crown,phase:Math.random()*Math.PI*2,scale});
+}
+
+// Végétation sur le pourtour de l'île uniquement : les jardins et les allées restent dégagés.
+for(let z=-48;z<=48;z+=16){
+  makeTree(-91+(Math.sin(z*1.7)+1)*1.6,z,1.05+(Math.cos(z)*.12),0);
+  makeTree(91+(Math.cos(z*1.3)+1)*1.6,z,1.05+(Math.sin(z)*.12),1);
+}
+for(let x=-82;x<=82;x+=18){
+  if(Math.abs(x)>22){makeTree(x,-60,1.0,2);makeTree(x,60,1.0,1);}
+}
+// Massifs fleuris le long des allées, hors des portes des jardins.
+for(const z of [-18,18]){
+  for(let x=-79;x<=79;x+=5.5){
+    if(Math.abs(x)<27)continue;
+    const bx=x, bz=z+(x%2?5.3:-5.3);
+    ball(bx,.46,bz,.20,x%3?pink:gold);
+    ball(bx+.25,.42,bz+.18,.15,M(0xb9dcff));
+  }
+}
+// Nuages doux animés au-dessus du jardin.
+for(let i=0;i<5;i++){const cloud=new THREE.Group();for(let j=0;j<4;j++){const puff=new THREE.Mesh(new THREE.SphereGeometry(1.25+(j%2)*.3,16,12),new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,transparent:true,opacity:.82}));puff.position.set((j-1.5)*1.15,(j%2)*.32,0);cloud.add(puff)}cloud.position.set(-38+i*19,15+(i%2)*3,-22+(i%3)*12);scene.add(cloud);animatedClouds.push({group:cloud,phase:i*1.7})}
+// Quelques lucioles qui flottent doucement à proximité des plantations.
+for(let i=0;i<22;i++){const mote=new THREE.Mesh(new THREE.SphereGeometry(.055,8,8),new THREE.MeshBasicMaterial({color:i%2?0xffef9a:0xc6ffb5}));mote.position.set(-17+Math.random()*24,.8+Math.random()*2, -4+Math.random()*18);scene.add(mote);sparkles.push({mesh:mote,phase:Math.random()*6.28,baseY:mote.position.y})}
+for(let i=0;i<10;i++){for(const side of [-1,1]){let x=side*19,z=18-i*6;cube(x,.5,z,.5,1,.5,wood);ball(x,1.2,z,.55,i%2?pink:gold);addCircleSolid(x,z,.42)}}
+// Zone arrière dégagée devant les trois comptoirs.
+// Three separate service stalls at the back of the garden: seed shop, animal shop, selling counter
+function signTexture(label,bg){
+ const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');
+ ctx.fillStyle=bg;ctx.fillRect(0,0,512,128);ctx.strokeStyle='#fff1c4';ctx.lineWidth=9;ctx.strokeRect(7,7,498,114);
+ ctx.fillStyle='#ffffff';ctx.font='bold 54px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,256,66);
+ const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return new THREE.MeshBasicMaterial({map:t});
+}
+function stall(x,z,label,color){
+ cube(x,.75,z,7,1.5,4,wood);addBoxSolid(x,z,3.8,2.35);cube(x,1.65,z,7.5,.25,4.5,gold);
+ cube(x-2.5,2.35,z, .22,1.3,.22,wood);cube(x+2.5,2.35,z,.22,1.3,.22,wood);
+ const roof=cube(x,3.1,z,7.8,.25,4.8,M(color));roof.rotation.z=.06;
+ const sign=new THREE.Mesh(new THREE.PlaneGeometry(4.8,1.15),signTexture(label,color));sign.position.set(x,2.35,z+2.32);scene.add(sign);
+ return {x,z,label};
+}
+const serviceSpots=[
+ {...stall(-15,-67,'🌱 GRAINES','#368b42'),type:'seeds'},
+ {...stall(0,-67,'🐾 ANIMAUX','#a64e9c'),type:'pets'},
+ {...stall(15,-67,'📦 VENDRE','#b87932'),type:'sell'}
+];
+// player
+const player=new THREE.Group();
+const body=new THREE.Mesh(new THREE.BoxGeometry(.8,1.2,.65),M(0x3d72ff));body.position.y=.9;player.add(body);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.34,18,14),M(0xffd2a4));head.position.y=1.7;player.add(head);
+const armL=new THREE.Group(),armR=new THREE.Group(),legL=new THREE.Group(),legR=new THREE.Group();
+for(const [g,x,y,len,mat] of [[armL,-.52,1.25,.72,M(0x3d72ff)],[armR,.52,1.25,.72,M(0x3d72ff)],[legL,-.23,.38,.72,M(0x3154b5)],[legR,.23,.38,.72,M(0x3154b5)]]){g.position.set(x,y,0);const limb=new THREE.Mesh(new THREE.BoxGeometry(.25,len,.28),mat);limb.position.y=-len/2+.12;limb.castShadow=true;g.add(limb);player.add(g)}
+// Visage, cheveux, petit sac et chaussures pour un avatar plus travaillé.
+const eyeMat=M(0x202a27),hairMat=M(0x56351f),shoeMat=M(0x3d2d24),packMat=M(0x2c5b36);
+for(const ex of [-.12,.12]){
+  const eye=new THREE.Mesh(new THREE.SphereGeometry(.045,12,10),eyeMat);eye.position.set(ex,1.75,-.305);player.add(eye);
+}
+const smile=new THREE.Mesh(new THREE.TorusGeometry(.075,.012,6,16,Math.PI),eyeMat);smile.position.set(0,1.61,-.315);smile.rotation.z=Math.PI;player.add(smile);
+const hair=new THREE.Mesh(new THREE.SphereGeometry(.355,16,12),hairMat);hair.scale.set(1.1,.45,1);hair.position.set(0,1.98,.02);player.add(hair);
+const backpack=new THREE.Mesh(new THREE.BoxGeometry(.48,.62,.22),packMat);backpack.position.set(0,1.02,.39);player.add(backpack);
+for(const x of [-.23,.23]){
+  const shoe=new THREE.Mesh(new THREE.BoxGeometry(.29,.17,.46),shoeMat);shoe.position.set(x,.12,-.05);player.add(shoe);
+}
+scene.add(player);player.position.set(0,0,58);
+let yaw=0,pitch=-.08,vy=0,onGround=true,cameraDistance=6.5;const keys={};
+let gamepadIndex=null,gamepadMoveX=0,gamepadMoveY=0,gamepadLookX=0,gamepadLookY=0,gamepadSprint=false;
+let padInteractWasDown=false,padMapWasDown=false,padJumpWasDown=false,padBackWasDown=false;
+let padUpWasDown=false,padDownWasDown=false,padLeftWasDown=false,padRightWasDown=false,padLbWasDown=false,padRbWasDown=false;
+let panelFocusIndex=0;
+let padConnectedOnce=false;
+const padStatus=document.getElementById('padStatus');
+function setPadStatus(connected){
+  if(!padStatus)return;
+  padStatus.textContent=connected?'🎮 Manette connectée':'🎮 Manette : non détectée';
+}
+function axisValue(v,deadZone=.16){
+  if(!Number.isFinite(v))return 0;
+  const a=Math.abs(v);if(a<deadZone)return 0;
+  return Math.sign(v)*Math.min(1,(a-deadZone)/(1-deadZone));
+}
+function buttonDown(pad,index){
+  const b=pad.buttons&&pad.buttons[index];
+  return !!(b&&(b.pressed||b.value>.55));
+}
+function pollGamepad(){
+  gamepadMoveX=gamepadMoveY=gamepadLookX=gamepadLookY=0;gamepadSprint=false;
+  if(!navigator.getGamepads)return;
+  let pads;
+  try{pads=navigator.getGamepads();}catch(err){return;}
+  let pad=gamepadIndex!==null&&pads[gamepadIndex]&&pads[gamepadIndex].connected?pads[gamepadIndex]:null;
+  if(!pad){
+    pad=null;gamepadIndex=null;
+    for(let i=0;i<pads.length;i++){if(pads[i]&&pads[i].connected){pad=pads[i];gamepadIndex=i;break;}}
+  }
+  if(!pad){
+    if(padConnectedOnce){setPadStatus(false);padConnectedOnce=false;}
+    padInteractWasDown=padMapWasDown=padJumpWasDown=padBackWasDown=false;
+    padUpWasDown=padDownWasDown=padLeftWasDown=padRightWasDown=padLbWasDown=padRbWasDown=false;
+    return;
+  }
+  if(!padConnectedOnce){setPadStatus(true);padConnectedOnce=true;toast('🎮 Manette détectée ! Joystick gauche = marcher, joystick droit = caméra.');}
+  const panelOpen=document.getElementById('panel').style.display==='block';
+  const interactDown=buttonDown(pad,2)||buttonDown(pad,7);
+  const mapDown=buttonDown(pad,3)||buttonDown(pad,9);
+  const jumpDown=buttonDown(pad,0);
+  const backDown=buttonDown(pad,1);
+  const upDown=buttonDown(pad,12), downDown=buttonDown(pad,13);
+  const leftDown=buttonDown(pad,14), rightDown=buttonDown(pad,15);
+  const lbDown=buttonDown(pad,4), rbDown=buttonDown(pad,5);
+  if(panelOpen){
+    if(upDown&&!padUpWasDown)movePanelFocus(-1);
+    if(downDown&&!padDownWasDown)movePanelFocus(1);
+    if((jumpDown&&!padJumpWasDown)||(interactDown&&!padInteractWasDown))activatePanelFocus();
+    if(backDown&&!padBackWasDown)closePanel();
+    gamepadMoveX=gamepadMoveY=gamepadLookX=gamepadLookY=0;
+  }else{
+    gamepadMoveX=axisValue(pad.axes[0]);
+    gamepadMoveY=axisValue(pad.axes[1]);
+    gamepadLookX=axisValue(pad.axes[2]);
+    gamepadLookY=axisValue(pad.axes[3]);
+    gamepadSprint=buttonDown(pad,10);
+    if((leftDown&&!padLeftWasDown)||(lbDown&&!padLbWasDown))changeSelectedSeed(-1);
+    if((rightDown&&!padRightWasDown)||(rbDown&&!padRbWasDown))changeSelectedSeed(1);
+    if(interactDown&&!padInteractWasDown&&document.getElementById('start').style.display==='none')interact();
+    if(mapDown&&!padMapWasDown&&document.getElementById('start').style.display==='none')document.getElementById('mapBtn').click();
+    if(jumpDown&&!padJumpWasDown&&document.getElementById('start').style.display==='none'&&onGround){vy=7;onGround=false;}
+  }
+  padInteractWasDown=interactDown;padMapWasDown=mapDown;padJumpWasDown=jumpDown;padBackWasDown=backDown;
+  padUpWasDown=upDown;padDownWasDown=downDown;padLeftWasDown=leftDown;padRightWasDown=rightDown;
+  padLbWasDown=lbDown;padRbWasDown=rbDown;
+}
+window.addEventListener('gamepadconnected',e=>{
+  gamepadIndex=e.gamepad.index;setPadStatus(true);padConnectedOnce=true;
+  toast('🎮 Manette connectée ! Joystick gauche = marcher, joystick droit = caméra.');
+});
+window.addEventListener('gamepaddisconnected',e=>{
+  if(gamepadIndex===e.gamepad.index)gamepadIndex=null;
+  gamepadMoveX=gamepadMoveY=gamepadLookX=gamepadLookY=0;
+  setPadStatus(false);padConnectedOnce=false;
+});
+// La souris fonctionne comme un petit joystick : son emplacement commande la rotation.
+// Garder le curseur sur le bord gauche/droit fait donc tourner la caméra sans fin.
+let mouseSteerX=0,mouseSteerY=0;
+const cameraHint=document.getElementById('cameraHint');
+function updateCameraHint(){cameraHint.textContent='🖱️ Bord gauche/droit : tourner en continu · Haut/bas : regarder · Centre : arrêter · Molette : zoom';}
+function steeringValue(value,deadZone=.12){
+  const a=Math.abs(value);if(a<=deadZone)return 0;
+  return Math.sign(value)*Math.pow((a-deadZone)/(1-deadZone),1.35);
+}
+function resetMouseSteering(){mouseSteerX=0;mouseSteerY=0;}
+document.addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;if(e.code==='Space')e.preventDefault();if(k==='e'&&!e.repeat&&document.getElementById('panel').style.display!=='block')interact();if(k==='p'&&!e.repeat&&document.getElementById('start').style.display==='none'){e.preventDefault();const panel=document.getElementById('panel');if(panel.style.display==='block')closePanel();else document.getElementById('mapBtn').click()}});
+document.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+document.addEventListener('mousemove',e=>{
+  if(document.getElementById('start').style.display!=='none'||document.getElementById('panel').style.display==='block'||(e.target&&e.target.closest&&e.target.closest('button,#panel,#hud,#actions,#start,#cameraHint'))){resetMouseSteering();return;}
+  const nx=(e.clientX/Math.max(1,innerWidth)-.5)*2;
+  const ny=(e.clientY/Math.max(1,innerHeight)-.5)*2;
+  mouseSteerX=steeringValue(nx);mouseSteerY=steeringValue(ny);
+});
+document.addEventListener('mouseleave',resetMouseSteering);
+window.addEventListener('blur',resetMouseSteering);
+renderer.domElement.addEventListener('wheel',e=>{if(document.getElementById('panel').style.display==='block')return;e.preventDefault();cameraDistance=Math.max(3.2,Math.min(13,cameraDistance+Math.sign(e.deltaY)*.65) )},{passive:false});
+function pointInsidePlatform(px,pz){
+  let inside=false;
+  for(let i=0,j=platformPolygon.length-1;i<platformPolygon.length;j=i++){
+    const a=platformPolygon[i],b=platformPolygon[j];
+    const crosses=((a.z>pz)!==(b.z>pz))&&(px<(b.x-a.x)*(pz-a.z)/(b.z-a.z)+a.x);
+    if(crosses)inside=!inside;
+  }
+  return inside;
+}
+function collidesAt(x,z){
+  const radius=.48;
+  // Vérifie aussi les coins du personnage : impossible de sortir de la plateforme ou d'entrer dans l'eau.
+  for(const [ox,oz] of [[0,0],[radius,0],[-radius,0],[0,radius],[0,-radius],[radius*.7,radius*.7],[-radius*.7,radius*.7],[radius*.7,-radius*.7],[-radius*.7,-radius*.7]]){
+    if(!pointInsidePlatform(x+ox,z+oz))return true;
+  }
+  for(const s of solids){
+    if(s.kind==='circle'){const rr=s.r+radius;if((x-s.x)**2+(z-s.z)**2<rr*rr)return true;}
+    else{const qx=Math.max(s.x-s.hx,Math.min(x,s.x+s.hx)),qz=Math.max(s.z-s.hz,Math.min(z,s.z+s.hz));if((x-qx)**2+(z-qz)**2<radius*radius)return true;}
+  }
+  return false;
+}
+function movePlayer(dx,dz){const nx=player.position.x+dx;if(!collidesAt(nx,player.position.z))player.position.x=nx;const nz=player.position.z+dz;if(!collidesAt(player.position.x,nz))player.position.z=nz;}
+function nearest(){let best=null,d=5.6;for(const p of plots){let n=Math.hypot(player.position.x-p.x,player.position.z-p.z);if(n<d){d=n;best=p}}return best}
+function nearestService(){let best=null,d=5.3;for(const spot of serviceSpots){let n=Math.hypot(player.position.x-spot.x,player.position.z-spot.z);if(n<d){d=n;best=spot}}return best}
+function toast(t){let el=document.getElementById('toast');el.textContent=t;el.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.style.display='none',2300)}
+const state={cash:5,gems:0,seeds:{Carotte:2,Fraise:0,Myrtille:0,Buttercup:0,Tomate:0,Corn:0,Daffodil:0,Watermelon:0,Pumpkin:0,Apple:0,Bamboo:0,Coconut:0,Cactus:0,'Fruit du dragon':0,Mango:0,Grape:0,Mushroom:0,Pepper:0,Cacao:0,Sunflower:0,Beanstalk:0,'Ember Lily':0,'Sugar Apple':0,'Burning Bud':0,'Giant Pinecone':0,'Elder Strawberry':0,Romanesco:0,'Crimson Thorn':0,Zebrazinkle:0,Octobloom:0,'Alien Apple':0},pets:[],gears:[],harvest:0,harvestValue:0,harvestItems:[],earned:0,expansions:0};
+const SAVE_KEY='growAGarden3D_save_v2';
+let hasLoadedSave=false;
+let selectedSeed=null;
+let worldStartedAt=Date.now();
+let currentWeatherKey='Clear',currentWeather='☀️ Journée claire',currentGameTime='Jour';
+let nextWeatherCheckAt=0,nextMutationSweepAt=0,lastWeatherToastKey='';
+const WORLD_DAY_MS=10*60*1000;
+const rarityColors={Common:'#d8d8d8',Uncommon:'#74d56c',Rare:'#5fa8ff',Legendary:'#c18cff',Mythical:'#e47bff',Divine:'#ffcd63',Prismatic:'#ff83c9',Transcendent:'#ff715f'};
+const seedDisplayNames={
+  Carotte:'Carotte',Fraise:'Fraise',Myrtille:'Myrtille',Buttercup:'Bouton-d’or',
+  Tomate:'Tomate',Corn:'Maïs',Daffodil:'Jonquille',Watermelon:'Pastèque',
+  Pumpkin:'Citrouille',Apple:'Pomme',Bamboo:'Bambou',Coconut:'Noix de coco',
+  Cactus:'Cactus','Fruit du dragon':'Fruit du dragon',Mango:'Mangue',Grape:'Raisin',
+  Mushroom:'Champignon',Pepper:'Poivron',Cacao:'Cacao',Sunflower:'Tournesol',
+  Beanstalk:'Haricot géant','Ember Lily':'Lys de braise','Sugar Apple':'Pomme sucrée',
+  'Burning Bud':'Bourgeon ardent','Giant Pinecone':'Pomme de pin géante',
+  'Elder Strawberry':'Fraise ancienne',Romanesco:'Romanesco',
+  'Crimson Thorn':'Épine cramoisie',Zebrazinkle:'Zebrazinkle',Octobloom:'Octobloom',
+  'Alien Apple':'Pomme alien'
+};
+const seedCatalog=[
+  ['🥕','Carotte','Common',10,true],['🍓','Fraise','Common',50,true],
+  ['🫐','Myrtille','Uncommon',400,true],['🌼','Buttercup','Uncommon',600,true],
+  ['🍅','Tomate','Rare',800,true],['🌽','Corn','Rare',1300,true],['🌼','Daffodil','Rare',1000,true],
+  ['🍉','Watermelon','Legendary',2500,true],['🎃','Pumpkin','Legendary',3000,true],
+  ['🍎','Apple','Legendary',3250,true],['🎋','Bamboo','Legendary',4000,true],
+  ['🥥','Coconut','Mythical',6000,true],['🌵','Cactus','Mythical',15000,true],
+  ['🐉','Fruit du dragon','Mythical',50000,true],['🥭','Mango','Mythical',100000,true],
+  ['🍇','Grape','Divine',850000,true],['🍄','Mushroom','Divine',150000,true],
+  ['🌶️','Pepper','Divine',1000000,true],['🍫','Cacao','Divine',2500000,true],
+  ['🌻','Sunflower','Divine',5560000,true],['🌿','Beanstalk','Prismatic',10000000,true],
+  ['🔥','Ember Lily','Prismatic',15000000,true],['🍏','Sugar Apple','Prismatic',25000000,true],
+  ['🌶️','Burning Bud','Prismatic',40000000,true],['🌲','Giant Pinecone','Prismatic',55000000,true],
+  ['🍓','Elder Strawberry','Prismatic',70000000,true],['🍃','Romanesco','Prismatic',88000000,true],
+  ['🌹','Crimson Thorn','Transcendent',10000000000,true],['🦓','Zebrazinkle','Transcendent',21000000000,true],
+  ['🌸','Octobloom','Transcendent',33000000000,true],['🍎','Alien Apple','Transcendent',1000000000000000,true]
+];
+const cropInfo={
+  Carotte:{price:10,grow:7,regrow:0,value:20,weight:.28,multi:false,color:0xff972f,emoji:'🥕',rarity:'Common'},
+  Fraise:{price:50,grow:32,regrow:16,value:15,weight:.30,multi:true,color:0xe94355,emoji:'🍓',rarity:'Common'},
+  Myrtille:{price:400,grow:100,regrow:20,value:20,weight:.20,multi:true,color:0x5364d8,emoji:'🫐',rarity:'Uncommon'},
+  Tomate:{price:800,grow:1102,regrow:220,value:30,weight:.50,multi:true,color:0xe94336,emoji:'🍅',rarity:'Rare'},
+  Watermelon:{price:2500,grow:1000,regrow:0,value:2905,weight:7,multi:false,color:0x47b95d,emoji:'🍉',rarity:'Legendary'},
+  Pumpkin:{price:3000,grow:2000,regrow:0,value:3854,weight:8,multi:false,color:0xf18a25,emoji:'🎃',rarity:'Legendary'},
+  Apple:{price:3250,grow:2200,regrow:440,value:275,weight:3,multi:true,color:0xd94a3e,emoji:'🍎',rarity:'Legendary'},
+  Bamboo:{price:4000,grow:235,regrow:0,value:4000,weight:4,multi:false,color:0x61ad47,emoji:'🎋',rarity:'Legendary'},
+  Coconut:{price:6000,grow:57020,regrow:570,value:400,weight:14,multi:true,color:0x8b633a,emoji:'🥥',rarity:'Mythical'},
+  Cactus:{price:15000,grow:3474,regrow:347,value:3400,weight:7,multi:true,color:0x4d9b53,emoji:'🌵',rarity:'Mythical'},
+  'Fruit du dragon':{price:50000,grow:18147,regrow:544,value:4750,weight:12,multi:true,color:0xff4e8d,emoji:'🐉',rarity:'Mythical'},
+  Mango:{price:100000,grow:1369,regrow:547,value:6500,weight:15,multi:true,color:0xf6a43b,emoji:'🥭',rarity:'Mythical'},
+  Grape:{price:850000,grow:10646,regrow:1064,value:7850,weight:3,multi:true,color:0x7546a9,emoji:'🍇',rarity:'Divine'},
+  Corn:{price:1300,grow:6559,regrow:327,value:40,weight:2,multi:true,color:0xf2cc4a,emoji:'🌽',rarity:'Rare'},
+  Pepper:{price:1000000,grow:600,regrow:160,value:8000,weight:5,multi:true,color:0xc9362b,emoji:'🌶️',rarity:'Divine'},
+  Cacao:{price:2500000,grow:948,regrow:284,value:12000,weight:8,multi:true,color:0x8b512b,emoji:'🍫',rarity:'Divine'}
+};
+const mutationInfo={
+  Moonlit:{label:'Lunaire',multiplier:2,color:0x9d83ff,weather:'Nuit'},
+  Bloodlit:{label:'Sanglante',multiplier:4,color:0xff3434,weather:'Lune de sang'},
+  Wet:{label:'Mouillée',multiplier:2,color:0x55c9ff,weather:'Pluie'},
+  Windstruck:{label:'Ventée',multiplier:2,color:0x9be58b,weather:'Vent'},
+  Chilled:{label:'Refroidie',multiplier:2,color:0x9fe9ff,weather:'Gel'},
+  Frozen:{label:'Gelée',multiplier:10,color:0xb9f5ff,weather:'Pluie + gel'},
+  Shocked:{label:'Électrisée',multiplier:100,color:0xffff70,weather:'Orage'},
+  Celestial:{label:'Céleste',multiplier:120,color:0xffdc8a,weather:'Météores'},
+  Silver:{label:'Argentée',multiplier:5,color:0xc7d4df,weather:'Engrais argent'},
+  Gold:{label:'Dorée',multiplier:20,color:0xffd34e,weather:'Engrais or / chance'},
+  Rainbow:{label:'Arc-en-ciel',multiplier:50,color:0xf78aff,weather:'Chance rare'},
+  Pollinated:{label:'Pollinisée',multiplier:3,color:0xffe56b,weather:'Abeilles / fleurs'},
+  HoneyGlazed:{label:'Glacée au miel',multiplier:5,color:0xffc04c,weather:'Arroseur de miel'},
+  Lush:{label:'Luxuriante',multiplier:3,color:0x62e283,weather:'Arroseur luxuriant'},
+  Drenched:{label:'Trempée',multiplier:5,color:0x54cafa,weather:'Événement aquatique'},
+  Sundried:{label:'Séchée au soleil',multiplier:85,color:0xe8a45a,weather:'Soleil extrême'},
+  Radioactive:{label:'Radioactive',multiplier:80,color:0x9cff48,weather:'Événement spécial'},
+  Disco:{label:'Disco',multiplier:125,color:0xf36cff,weather:'Disco / abeille disco'},
+  Meteoric:{label:'Météorique',multiplier:125,color:0xff9f57,weather:'Impact de météore'},
+  Galactic:{label:'Galactique',multiplier:120,color:0x7752df,weather:'Événement spatial'},
+  Aurora:{label:'Aurore',multiplier:90,color:0x64e8db,weather:'Aurore'},
+  Voidtouched:{label:'Touchée par le vide',multiplier:135,color:0x281b52,weather:'Trou noir'},
+  Dawnbound:{label:'Liée à l’aube',multiplier:150,color:0xffc86b,weather:'Événement Soleil'},
+  Tempestuous:{label:'Tempétueuse',multiplier:12,color:0x9ad5ef,weather:'Vent violent'},
+  Twisted:{label:'Tordue',multiplier:5,color:0x65c48a,weather:'Tornade'},
+  Cloudtouched:{label:'Touchée par les nuages',multiplier:5,color:0xb8d9ff,weather:'Nuages spéciaux'},
+  Zombified:{label:'Zombifiée',multiplier:25,color:0x7fbd55,weather:'Événement zombie'},
+  Molten:{label:'Fondue',multiplier:25,color:0xf36a2e,weather:'Volcan'},
+  Astral:{label:'Astrale',multiplier:365,color:0x9f7cff,weather:'Fusion Cosmic + Galactic'},
+  Cosmic:{label:'Cosmique',multiplier:240,color:0xc18aff,weather:'Fusion Celestial + Aurora'},
+  Abyssal:{label:'Abyssale',multiplier:240,color:0x6c4a9c,weather:'Fusion Eclipsed + Voidtouched'},
+  Stormcharged:{label:'Chargée par la tempête',multiplier:180,color:0x75b9ff,weather:'Fusion de mutations de tempête'},
+  Acidic:{label:'Acide',multiplier:15,color:0xa4d83d,weather:'Pluie acide'},
+  Arid:{label:'Aride',multiplier:6,color:0xe6a047,weather:'Sécheresse / animal'},
+  Ceramic:{label:'Céramique',multiplier:32,color:0x8b7c72,weather:'Combinaison spéciale'},
+  Clay:{label:'Argileuse',multiplier:5,color:0xa56f4d,weather:'Mouillée ou trempée + sable'},
+  Cracked:{label:'Craquelée',multiplier:4,color:0xb88c62,weather:'Séisme / super tempête'},
+  Diamond:{label:'Diamant',multiplier:50,color:0x79e9fa,weather:'Animal spécial'},
+  Eclipsed:{label:'Éclipsée',multiplier:20,color:0x5556a8,weather:'Éclipse solaire'},
+  Fall:{label:'Automnale',multiplier:4,color:0xde9c43,weather:'Floraison d’automne'},
+  Friendbound:{label:'Liée à l’amitié',multiplier:70,color:0xff84c6,weather:'Pot d’amitié / amis'},
+  Gnomed:{label:'Gnomisée',multiplier:15,color:0x9ecb61,weather:'Gnome'},
+  Moist:{label:'Humide',multiplier:3,color:0x69b8d8,weather:'Bruine'},
+  Monsoon:{label:'Mousson',multiplier:50,color:0x3184b5,weather:'Typhon safari'},
+  Nocturnal:{label:'Nocturne',multiplier:4,color:0x5b4c8a,weather:'Nuit safari'},
+  Paradisal:{label:'Paradis',multiplier:100,color:0x92df55,weather:'Verdoyante + séchée au soleil'},
+  Sandy:{label:'Sableuse',multiplier:3,color:0xd3b36d,weather:'Tempête de sable'},
+  Twilight:{label:'Crépusculaire',multiplier:4,color:0x9b79b5,weather:'Crépuscule safari'},
+  Verdant:{label:'Verdoyante',multiplier:4,color:0x52b65d,weather:'Flare solaire / coucher de soleil'},
+};
+const mutationCatalog=Object.entries(mutationInfo).map(([id,v])=>({id,...v}));
+
+function formatDuration(seconds){
+  seconds=Math.max(0,Math.ceil(seconds));
+  const h=Math.floor(seconds/3600),m=Math.floor((seconds%3600)/60),s=seconds%60;
+  return (h?h+' h ':'')+(m?m+' min ':'')+s+' s';
+}
+function cropMutationMultiplier(p){
+  const muts=Array.isArray(p.mutations)?p.mutations:[];
+  if(muts.includes('Frozen'))return 10;
+  return 1+muts.reduce((sum,m)=>sum+((mutationInfo[m]?.multiplier||1)-1),0);
+}
+function cropMutationLabel(p){return (p.mutations||[]).map(m=>mutationInfo[m]?.label||m).join(' + ')}
+
+function saveGame(){
+  try{
+    const data={version:2,savedAt:Date.now(),worldStartedAt,
+      state:{cash:state.cash,gems:state.gems,seeds:state.seeds,pets:state.pets,harvest:state.harvest,harvestValue:state.harvestValue,harvestItems:state.harvestItems,earned:state.earned,expansions:state.expansions},
+      plots:plots.map(p=>({stage:p.stage,crop:p.crop,growStartedAt:p.growStartedAt||0,readyAt:p.readyAt||0,growDuration:p.growDuration||0,mutations:Array.isArray(p.mutations)?p.mutations:[],lastMutationTryAt:p.lastMutationTryAt||0})),
+      player:{x:player.position.x,y:player.position.y,z:player.position.z},
+      camera:{yaw,pitch,distance:cameraDistance},selectedSeed};
+    localStorage.setItem(SAVE_KEY,JSON.stringify(data));
+    // Keep old save key as fallback so an interrupted update never wipes the previous garden.
+    localStorage.setItem('growAGarden3D_save_v1',JSON.stringify(data));
+    const badge=document.getElementById('saveStatus');if(badge)badge.textContent='💾 Partie sauvegardée';
+    return true;
+  }catch(err){const badge=document.getElementById('saveStatus');if(badge)badge.textContent='⚠️ Sauvegarde indisponible';return false;}
+}
+function loadGame(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY)||localStorage.getItem('growAGarden3D_save_v1');
+    if(!raw)return false;
+    const data=JSON.parse(raw);if(!data||!data.state)return false;
+    const s=data.state;
+    state.cash=Number.isFinite(s.cash)?Math.max(0,s.cash):5;
+    state.gems=Number.isFinite(s.gems)?Math.max(0,s.gems):0;
+    state.harvest=Number.isFinite(s.harvest)?Math.max(0,s.harvest):0;
+    state.harvestValue=Number.isFinite(s.harvestValue)?Math.max(0,s.harvestValue):state.harvest*20;
+    state.harvestItems=Array.isArray(s.harvestItems)?s.harvestItems:[];
+    state.earned=Number.isFinite(s.earned)?Math.max(0,s.earned):0;state.expansions=Number.isFinite(s.expansions)?Math.max(0,Math.min(5,s.expansions)):0;
+    for(const k of Object.keys(state.seeds))state.seeds[k]=Number.isFinite(s.seeds?.[k])?Math.max(0,s.seeds[k]):0;
+    // Migration of the previous Cacao doré inventory name.
+    if(s.seeds&&Number.isFinite(s.seeds['Cacao doré']))state.seeds.Cacao+=s.seeds['Cacao doré'];
+    state.pets=Array.isArray(s.pets)?s.pets.filter(x=>['Chat','Chien','Crabe','Dragon'].includes(x)):[];
+    worldStartedAt=Number.isFinite(data.worldStartedAt)?data.worldStartedAt:Date.now();
+    ensureSavedExpansions(state.expansions);
+    if(Array.isArray(data.plots))data.plots.forEach((saved,i)=>{
+      const p=plots[i];if(!p||!saved)return;
+      p.crop=typeof saved.crop==='string'?saved.crop:null;
+      if(!p.crop||!cropInfo[p.crop]){p.stage=0;p.crop=null;return;}
+      p.mutations=Array.isArray(saved.mutations)?saved.mutations.filter(m=>mutationInfo[m]):[];
+      p.lastMutationTryAt=Number.isFinite(saved.lastMutationTryAt)?saved.lastMutationTryAt:Date.now();
+      p.growStartedAt=Number.isFinite(saved.growStartedAt)?saved.growStartedAt:0;
+      p.growDuration=Number.isFinite(saved.growDuration)?saved.growDuration:0;
+      p.readyAt=Number.isFinite(saved.readyAt)?saved.readyAt:0;
+      // Old saves had manual stages; translate them into a timed crop.
+      if(!p.readyAt){
+        const info=cropInfo[p.crop];
+        p.growStartedAt=Date.now();p.growDuration=(saved.stage>=3?0:info.grow*1000);
+        p.readyAt=Date.now()+p.growDuration;
+      }
+      p.stage=Date.now()>=p.readyAt?2:1;
+      if(saved.stage===3&&!saved.readyAt)p.stage=2;
+      makePlant(p,p.crop);
+    });
+    if(data.player&&[data.player.x,data.player.y,data.player.z].every(Number.isFinite))player.position.set(data.player.x,Math.max(0,data.player.y),data.player.z);
+    if(data.camera){yaw=Number.isFinite(data.camera.yaw)?data.camera.yaw:0;pitch=Number.isFinite(data.camera.pitch)?Math.max(-.72,Math.min(.9,data.camera.pitch)):-.08;cameraDistance=Number.isFinite(data.camera.distance)?Math.max(3.2,Math.min(13,data.camera.distance)):6.5;}
+    selectedSeed=(data.selectedSeed&&state.seeds[data.selectedSeed]>0)?data.selectedSeed:(availableSeedNames()[0]||null);
+    hasLoadedSave=true;return true;
+  }catch(err){return false;}
+}
+const seedData=seedCatalog;
+function availableSeedNames(){return Object.keys(state.seeds).filter(name=>state.seeds[name]>0&&cropInfo[name])}
+function setSelectedSeed(name,announce=true){
+  if(!name||!state.seeds[name]){if(announce)toast('Tu ne possèdes pas cette graine.');return false;}
+  selectedSeed=name;updateHud();saveGame();if(announce)toast('🌱 Graine équipée : '+name+' × '+state.seeds[name]);return true;
+}
+function changeSelectedSeed(direction){
+  const names=availableSeedNames();if(!names.length){toast('Tu n’as pas encore de graines. Passe au comptoir des graines !');return;}
+  let index=names.indexOf(selectedSeed);if(index<0)index=direction>0?-1:0;
+  selectedSeed=names[(index+direction+names.length)%names.length];updateHud();toast('🌱 Graine équipée : '+selectedSeed+' × '+state.seeds[selectedSeed]);saveGame();
+}
+function updateHud(){
+  document.getElementById('cash').textContent=state.cash.toLocaleString('fr-FR');
+  document.getElementById('gems').textContent=state.gems;
+  document.getElementById('seednum').textContent=Object.values(state.seeds).reduce((a,b)=>a+b,0);
+  const label=document.getElementById('selectedSeed');if(label)label.textContent='🌱 Équipée : '+(selectedSeed&&state.seeds[selectedSeed]>0?selectedSeed+' × '+state.seeds[selectedSeed]:'aucune');
+  const bag=document.getElementById('harvestStatus');if(bag)bag.textContent='🧺 Récolte : '+(state.harvestValue||0).toLocaleString('fr-FR')+' €';
+  const weather=document.getElementById('weatherStatus');if(weather)weather.textContent=currentWeather+' · '+currentGameTime;
+}
+function panelButtons(){return Array.from(document.querySelectorAll('#content button')).filter(b=>!b.disabled)}
+function refreshPanelFocus(){const buttons=panelButtons();panelFocusIndex=Math.max(0,Math.min(panelFocusIndex,buttons.length-1));buttons.forEach((button,index)=>button.classList.toggle('pad-focus',index===panelFocusIndex));}
+function movePanelFocus(direction){const buttons=panelButtons();if(!buttons.length)return;panelFocusIndex=(panelFocusIndex+direction+buttons.length)%buttons.length;refreshPanelFocus();}
+function activatePanelFocus(){const buttons=panelButtons();if(buttons[panelFocusIndex])buttons[panelFocusIndex].click();}
+function showPanel(title,body){resetMouseSteering();document.getElementById('content').innerHTML='<h2>'+title+'</h2>'+body;document.getElementById('panel').style.display='block';panelFocusIndex=0;refreshPanelFocus();}
+function closePanel(){document.getElementById('panel').style.display='none';resetMouseSteering();}
+document.getElementById('close').onclick=closePanel;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('panel').style.display==='block')closePanel();});
+function openSeedShop(){
+  const rows=seedCatalog.map(([ic,n,rarity,price,rotating])=>{
+    const playable=!!cropInfo[n]&&Object.prototype.hasOwnProperty.call(state.seeds,n);
+    const info=cropInfo[n];
+    const time=playable?'Pousse : '+formatDuration(info.grow)+(info.multi?' · repousse : '+formatDuration(info.regrow):' · récolte unique'):'Durée de pousse exacte à vérifier';
+    const label=seedDisplayNames[n]||n;
+    return `<div class="item"><div>${ic} <b>${label}</b><small><span style="color:${rarityColors[rarity]}">${rarity}</span> · ${price.toLocaleString('fr-FR')} € · ${time}${rotating?' · stock variable':''} · En stock : ${state.seeds[n]||0}</small></div><span>${playable?`<button data-select-seed="${n}">Équiper</button> <button data-buy="${n}">Acheter</button>`:'<button disabled title="Données de pousse à vérifier">Catalogue</button>'}</span></div>`;
+  }).join('');
+  showPanel('🌱 Boutique des graines',`<p>Catalogue des graines du Seed Shop recensées. Les stocks tournent : certaines graines ne sont pas disponibles à chaque réassort. Les durées et cultures non vérifiées sont indiquées comme telles.</p>${rows}<p>Les cultures spéciales et saisonnières sont regroupées dans le Notebook.</p>`);
+}
+document.getElementById('content').addEventListener('click',e=>{
+  const button=e.target.closest('button');if(!button)return;
+  const selected=button.dataset.selectSeed;if(selected){if(network.role==='guest'){sendNetwork({type:'command',command:'selectSeed',name:selected});selectedSeed=selected;updateHud();toast('Choix envoyé à l’hôte.');}else setSelectedSeed(selected);return;}
+  const n=button.dataset.buy;if(n){const info=cropInfo[n];if(!info){toast('Cette graine est dans le catalogue, mais sa durée de pousse exacte doit être ajoutée avant de l’activer.');return;}if(network.role==='guest'){sendNetwork({type:'command',command:'buySeed',name:n});toast('Demande d’achat envoyée à l’hôte.');return;}if(state.cash<info.price){toast('Pas assez de € !');return;}state.cash-=info.price;state.seeds[n]++;if(!selectedSeed)selectedSeed=n;updateHud();saveGame();toast('Graine de '+n+' achetée !');refreshPanelFocus();return;}
+  const pet=button.dataset.pet;if(pet){if(network.role==='guest'){sendNetwork({type:'command',command:'buyPet',name:pet});toast('Demande envoyée à l’hôte.');return;}const prices={Chat:250,Chien:400,Crabe:600};if(state.cash<prices[pet]){toast('Pas assez de € !');return;}state.cash-=prices[pet];state.pets.push(pet);updateHud();saveGame();toast(pet+' adopté !');refreshPanelFocus();}
+  if(button.dataset.dragon!==undefined){if(network.role==='guest'){sendNetwork({type:'command',command:'buyDragon'});toast('Demande envoyée à l’hôte.');return;}if(state.gems<10){toast('Il te faut 10 diamants !');return;}state.gems-=10;state.pets.push('Dragon');updateHud();saveGame();toast('🐉 Dragon légendaire adopté !');refreshPanelFocus();}
+});
+function openPetShop(){showPanel('🐾 Boutique des animaux','<p>Adopte un compagnon pour ton jardin.</p>'+[['🐱','Chat',250],['🐶','Chien',400],['🦀','Crabe',600]].map(([ic,n,c])=>`<div class="item"><div>${ic} <b>${n}</b><small>${c.toLocaleString('fr-FR')} €</small></div><button data-pet="${n}">Adopter</button></div>`).join('')+'<div class="item"><div>🐉 <b>Dragon légendaire</b><small>10 diamants 💎</small></div><button data-dragon>Adopter</button></div><p>Mes animaux : '+(state.pets.join(', ')||'Aucun')+'</p>');}
+
+// ===================== AMIS / MULTIJOUEUR P2P =====================
+const network={role:'solo',peer:null,roomId:null,connections:new Map(),members:new Map(),avatars:new Map(),lastPosSent:0,lastStateSent:0,displayName:'Jardinier'};
+function onlineLabel(text){const el=document.getElementById('onlineStatus');if(el)el.textContent=text;}
+function sendNetwork(message){
+  if(network.role==='guest'&&network.connections.has('host')){
+    const c=network.connections.get('host');if(c&&c.open)c.send(message);
+  }
+}
+function makeRemoteAvatar(id,name){
+  if(network.avatars.has(id))return network.avatars.get(id);
+  const g=new THREE.Group();
+  const shirt=new THREE.Mesh(new THREE.BoxGeometry(.75,1.1,.62),M(0xe0a64b));shirt.position.y=.9;g.add(shirt);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.32,14,12),M(0xffd2a4));head.position.y=1.65;g.add(head);
+  const marker=makeTextSprite(name||'Ami');marker.scale.set(2.2,.55,1);marker.position.y=2.35;g.add(marker);
+  scene.add(g);network.avatars.set(id,g);return g;
+}
+function removeRemoteAvatar(id){const a=network.avatars.get(id);if(a){scene.remove(a);network.avatars.delete(id);}}
+function partyWorldSnapshot(){
+  return {
+    state:{cash:state.cash,gems:state.gems,seeds:state.seeds,pets:state.pets,harvest:state.harvest,harvestValue:state.harvestValue,harvestItems:state.harvestItems,earned:state.earned,expansions:state.expansions},
+    plots:plots.map(p=>({x:p.x,z:p.z,stage:p.stage,crop:p.crop,readyAt:p.readyAt||0,growStartedAt:p.growStartedAt||0,growDuration:p.growDuration||0,mutations:p.mutations||[]})),
+    players:[{id:'host',name:'Hôte',x:player.position.x,y:player.position.y,z:player.position.z,yaw},...Array.from(network.members.values()).map(p=>({id:p.id,name:p.name,x:p.x||0,y:p.y||0,z:p.z||0,yaw:p.yaw||0}))],
+    selectedSeed
+  };
+}
+function applyPartySnapshot(s){
+  if(!s)return;
+  if(s.state){
+    for(const k of ['cash','gems','harvest','harvestValue','earned','expansions'])if(Number.isFinite(s.state[k]))state[k]=s.state[k];
+    updateGardenAccess();
+    for(const k of Object.keys(state.seeds))state.seeds[k]=Number.isFinite(s.state.seeds?.[k])?s.state.seeds[k]:0;
+    state.pets=Array.isArray(s.state.pets)?s.state.pets.slice():[];
+    state.harvestItems=Array.isArray(s.state.harvestItems)?s.state.harvestItems.slice():[];
+  }
+  if(Array.isArray(s.plots)){
+    while(plots.length<s.plots.length){
+      const i=plots.length-9;if(i>=0)addExpansionPlots(Math.floor(i/9));
+      if(plots.length>=36)break;
+    }
+    s.plots.forEach((q,i)=>{
+      const p=plots[i];if(!p)return;
+      const changed=p.crop!==q.crop;
+      p.stage=q.stage||0;p.crop=q.crop||null;p.readyAt=q.readyAt||0;p.growStartedAt=q.growStartedAt||0;p.growDuration=q.growDuration||0;p.mutations=Array.isArray(q.mutations)?q.mutations.slice():[];
+      if(changed){if(p.obj){scene.remove(p.obj);p.obj=null;}if(p.timerSprite){scene.remove(p.timerSprite);p.timerSprite=null;}if(p.crop)makePlant(p,p.crop);}
+      if(p.obj){if(p.fruitMesh)p.fruitMesh.visible=p.stage===2;applyPlantMutationVisual(p);updatePlotLabel(p);}
+    });
+  }
+  if(s.selectedSeed&&state.seeds[s.selectedSeed]>0)selectedSeed=s.selectedSeed;
+  updateHud();saveGame();
+  const seen=new Set();
+  (s.players||[]).forEach(p=>{
+    if((network.role==='guest'&&p.id==='host')||(p.id!=='host'&&p.id!==network.peer?.id)){
+      seen.add(p.id);const a=makeRemoteAvatar(p.id,p.name||'Ami');a.position.set(p.x||0,p.y||0,p.z||0);a.rotation.y=p.yaw||0;
+    }
+  });
+  for(const id of Array.from(network.avatars.keys()))if(!seen.has(id))removeRemoteAvatar(id);
+}
+function sendPartySnapshot(connection=null){
+  if(network.role!=='host')return;
+  const data={type:'snapshot',world:partyWorldSnapshot()};
+  if(connection){if(connection.open)connection.send(data);return;}
+  for(const c of network.connections.values())if(c.open)c.send(data);
+}
+function handleHostCommand(conn,msg){
+  const member=network.members.get(conn.peer);if(!member)return;
+  if(msg.command==='position'){
+    member.x=Number(msg.x)||0;member.y=Number(msg.y)||0;member.z=Number(msg.z)||0;member.yaw=Number(msg.yaw)||0;
+    return;
+  }
+  if(msg.command==='plot'){
+    const p=plots[Math.max(0,Math.min(plots.length-1,Number(msg.plotIndex)||0))];
+    if(p){const old=player.position.clone(),oldYaw=yaw;player.position.set(member.x||0,0,member.z||0);yaw=member.yaw||0;interactPlot(p,msg.seed);player.position.copy(old);yaw=oldYaw;}
+  }else if(msg.command==='buySeed'){
+    const name=msg.name,info=cropInfo[name];if(info&&seedCatalog.some(x=>x[1]===name)&&state.cash>=info.price){state.cash-=info.price;state.seeds[name]=(state.seeds[name]||0)+1;if(!selectedSeed)selectedSeed=name;updateHud();saveGame();}
+  }else if(msg.command==='selectSeed'){
+    if(state.seeds[msg.name]>0&&cropInfo[msg.name])selectedSeed=msg.name;
+  }else if(msg.command==='sell'){
+    sellHarvest();
+  }else if(msg.command==='buyPet'){
+    const prices={Chat:250,Chien:400,Crabe:600};if(prices[msg.name]&&state.cash>=prices[msg.name]){state.cash-=prices[msg.name];state.pets.push(msg.name);saveGame();updateHud();}
+  }else if(msg.command==='buyDragon'){
+    if(state.gems>=10){state.gems-=10;state.pets.push('Dragon');saveGame();updateHud();}
+  }
+  sendPartySnapshot();
+}
+function attachHostConnection(conn){
+  if(network.connections.size>=3){conn.on('open',()=>conn.send({type:'full'}));conn.close();return;}
+  network.connections.set(conn.peer,conn);
+  conn.on('open',()=>{conn.send({type:'welcome',name:'Hôte'});});
+  conn.on('data',msg=>{
+    if(!msg||typeof msg!=='object')return;
+    if(msg.type==='join'){
+      network.members.set(conn.peer,{id:conn.peer,name:String(msg.name||'Ami').slice(0,18),x:0,y:0,z:0,yaw:0});
+      onlineLabel('👥 Hôte · '+(network.connections.size+1)+'/4');sendPartySnapshot();
+    }else if(msg.type==='command')handleHostCommand(conn,msg);
+  });
+  conn.on('close',()=>{network.connections.delete(conn.peer);network.members.delete(conn.peer);removeRemoteAvatar(conn.peer);onlineLabel('👥 Hôte · '+(network.connections.size+1)+'/4');sendPartySnapshot();});
+}
+function createFriendsParty(){
+  // Nettoyage d'une ancienne session PeerJS qui pourrait rester bloquée.
+  if(network.peer){
+    try{network.peer.destroy();}catch(e){}
+    network.peer=null;network.connections.clear();network.members.clear();
+  }
+  if(!window.Peer){toast('Connexion au service multijoueur impossible. Vérifie Internet.');return;}
+  network.displayName=(document.getElementById('playerName')?.value||'Jardinier').trim().slice(0,18)||'Jardinier';
+  const peer=new Peer();network.peer=peer;network.role='host';
+  let settled=false;
+  peer.on('open',id=>{
+    if(network.peer!==peer)return;
+    settled=true;network.roomId=id;onlineLabel('👥 Hôte · 1/4');
+    const link=location.href.split('?')[0]+'?join='+encodeURIComponent(id);
+    showPanel('👥 Ta partie est créée',`<p>La partie peut accueillir 4 joueurs.</p><div class="item"><b>Code d’invitation</b><span>${id}</span></div><button id="copyPartyLink">Copier le lien d’invitation</button><p>Envoie ce lien à tes amis. Tu dois rester dans le jeu pour héberger la partie.</p><p id="partyLinkText" style="word-break:break-all;font-size:11px">${link}</p><button id="leaveParty">Fermer la partie</button>`);
+    document.getElementById('copyPartyLink').onclick=()=>copyInvite(link);
+    document.getElementById('leaveParty').onclick=()=>leaveFriendsParty();
+    toast('🌐 Salle ouverte ! Invite tes amis avec le lien.');
+  });
+  peer.on('connection',attachHostConnection);
+  peer.on('error',e=>{
+    if(network.peer!==peer)return;
+    toast('Connexion multijoueur : '+(e.message||'erreur'));
+    // Libère le Peer après une erreur, au lieu de laisser une session fantôme.
+    leaveFriendsParty(false);
+  });
+  peer.on('close',()=>{
+    if(network.peer===peer){network.peer=null;network.roomId=null;network.role='solo';onlineLabel('👥 Solo');}
+  });
+}
+function joinFriendsParty(roomId){
+  // Si une session précédente est bloquée, on la détruit avant de réessayer.
+  if(network.peer)leaveFriendsParty(false);
+  if(!window.Peer){toast('Le module multijoueur ne s’est pas chargé.');return;}
+  const id=(roomId||document.getElementById('roomCode')?.value||'').trim();
+  if(!id){toast('Entre le code de la partie de ton ami.');return;}
+  network.displayName=(document.getElementById('playerName')?.value||'Jardinier').trim().slice(0,18)||'Jardinier';
+  const peer=new Peer();network.peer=peer;network.role='guest';
+  let connection=null;
+  peer.on('open',()=>{
+    if(network.peer!==peer)return;
+    connection=peer.connect(id,{reliable:true});network.connections.set('host',connection);
+    connection.on('open',()=>{
+      if(network.peer!==peer)return;
+      connection.send({type:'join',name:network.displayName});
+      onlineLabel('👥 Connexion…');toast('Connexion au jardin en cours…');
+    });
+    connection.on('data',msg=>{
+      if(!msg||network.peer!==peer)return;
+      if(msg.type==='full'){toast('Cette partie est complète (4 joueurs maximum).');leaveFriendsParty();}
+      if(msg.type==='welcome')toast('Connexion à '+(msg.name||'l’hôte')+'…');
+      if(msg.type==='snapshot'){onlineLabel('👥 Connecté');applyPartySnapshot(msg.world);}
+    });
+    connection.on('close',()=>{
+      if(network.peer===peer){toast('La connexion avec l’hôte est fermée.');leaveFriendsParty(false);}
+    });
+    connection.on('error',e=>{
+      if(network.peer===peer){toast('Connexion interrompue : '+(e.message||'réessaie'));leaveFriendsParty(false);}
+    });
+  });
+  peer.on('error',e=>{
+    if(network.peer!==peer)return;
+    toast('Impossible de rejoindre : '+(e.message||'vérifie le code et le lien'));
+    leaveFriendsParty(false);
+  });
+  peer.on('close',()=>{
+    if(network.peer===peer){network.peer=null;network.roomId=null;network.role='solo';onlineLabel('👥 Solo');}
+  });
+}
+function copyInvite(link){
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(link).then(()=>toast('Lien copié !')).catch(()=>prompt('Copie ce lien :',link));
+  else prompt('Copie ce lien :',link);
+}
+function leaveFriendsParty(closeUi=true){
+  const oldPeer=network.peer;
+  network.peer=null;network.roomId=null;network.role='solo';
+  for(const c of network.connections.values())try{c.close();}catch(e){}
+  network.connections.clear();network.members.clear();
+  for(const id of Array.from(network.avatars.keys()))removeRemoteAvatar(id);
+  if(oldPeer){try{oldPeer.destroy();}catch(e){}}
+  onlineLabel('👥 Solo');
+  if(closeUi)openNotebook();
+}
+function networkTick(now){
+  if(network.role==='guest'&&network.connections.has('host')&&now-network.lastPosSent>100){
+    network.lastPosSent=now;sendNetwork({type:'command',command:'position',x:player.position.x,y:player.position.y,z:player.position.z,yaw});
+  }
+  if(network.role==='host'&&now-network.lastStateSent>350){network.lastStateSent=now;sendPartySnapshot();}
+}
+function openFriendsPanel(){
+  showPanel('👥 Jouer avec des amis',`<p>Crée une salle et envoie le lien à tes amis. Jusqu’à 4 joueurs peuvent visiter le même jardin.</p><label>Ton pseudo</label><input id="playerName" maxlength="18" placeholder="Jardinier"><button id="createParty">Créer une partie</button><hr><label>Code de la partie de ton ami</label><input id="roomCode" placeholder="Colle le code reçu"><button id="joinParty">Rejoindre une partie</button><p><small>La connexion passe par PeerJS et WebRTC. L’hôte doit rester connecté pour que la salle reste ouverte.</small></p>`);
+  document.getElementById('createParty').onclick=createFriendsParty;
+  document.getElementById('joinParty').onclick=()=>joinFriendsParty();
+}
+window.addEventListener('load',()=>{
+  const params=new URLSearchParams(location.search);const join=params.get('join');
+  if(join){setTimeout(()=>{showPanel('👥 Rejoindre un ami',`<p>Invitation reçue ! Entre ton pseudo pour rejoindre.</p><input id="playerName" maxlength="18" placeholder="Jardinier"><button id="joinParty">Rejoindre</button>`);document.getElementById('joinParty').onclick=()=>joinFriendsParty(join);},700);}
+});
+/* ===================== PARTIES SAUVEGARDÉES ===================== */
+function saveToSlot(slot){
+  saveGame();const raw=localStorage.getItem(SAVE_KEY);if(!raw){toast('Aucune partie à sauvegarder.');return;}
+  localStorage.setItem('gag3d_slot_'+slot,raw);toast('💾 Partie enregistrée dans l’emplacement '+slot+'.');openNotebook();
+}
+function loadFromSlot(slot){
+  const raw=localStorage.getItem('gag3d_slot_'+slot);if(!raw){toast('Cet emplacement est vide.');return;}
+  localStorage.setItem(SAVE_KEY,raw);location.reload();
+}
+function slotDescription(slot){
+  const raw=localStorage.getItem('gag3d_slot_'+slot);if(!raw)return 'Vide';
+  try{const d=JSON.parse(raw);return 'Sauvegardée le '+new Date(d.savedAt||Date.now()).toLocaleString('fr-FR')+' · '+(d.state?.cash||0).toLocaleString('fr-FR')+' €';}catch(e){return 'Fichier de sauvegarde illisible';}
+}
+function openNotebook(){
+  const saveRows=[1,2,3].map(i=>`<div class="item"><div><b>Partie ${i}</b><small>${slotDescription(i)}</small></div><span><button data-save-slot="${i}">Sauver</button> <button data-load-slot="${i}">Charger</button></span></div>`).join('');
+  const landCosts=gardenCosts;
+  const expandPrice=landCosts[state.expansions]||0;
+  showPanel('📒 Notebook / Map',`<div class="item"><b>👥 Amis</b><button id="friendsOpen">Jouer ensemble</button></div>
+  <div class="item"><div><b>🌳 Acheter le jardin suivant</b><small>${state.expansions+1} jardins sur 6 ouverts · Terrain suivant : ${expandPrice?expandPrice.toLocaleString('fr-FR')+' €':'tous les jardins sont achetés'}</small></div><button id="buyExpansion" ${state.expansions>=5?'disabled':''}>Acheter</button></div>
+  <hr><h3>💾 Mes parties sauvegardées sur cet appareil</h3>${saveRows}
+  <hr><h3>🌱 Mon jardin</h3><p>Graines : ${Object.entries(state.seeds).filter(x=>x[1]>0).map(x=>x[0]+' × '+x[1]).join(', ')||'Aucune'}</p>
+  <p>🐾 Compagnons : ${state.pets.join(', ')||'Aucun'}</p><p>🧺 Récolte en attente : ${state.harvest} fruit(s), ${state.harvestValue.toLocaleString('fr-FR')} €</p>
+  <p>🌤️ Météo : ${currentWeather} · ${currentGameTime}</p>
+  <hr><h3>✨ Mutations intégrées à cette version</h3>
+  <p>${mutationCatalog.map(m=>m.label+' ×'+m.multiplier).join(' · ')}</p>
+  <h3>📚 Encyclopédie du jeu d’origine</h3>
+  <p>Cette version contient une sélection de mutations jouables ; les autres mutations, objets d’événement et collections complètes sont consultables dans les bases communautaires, qui recensent plus de 600 plantes et environ 196 mutations selon leur dernière mise à jour :</p>
+  <p><a target="_blank" rel="noopener" href="https://growgardenvalue.com/wiki/">Base complète plantes, animaux et mutations</a> · <a target="_blank" rel="noopener" href="https://bloxodes.com/wiki/grow-a-garden/seeds">Toutes les graines</a> · <a target="_blank" rel="noopener" href="https://bloxodes.com/wiki/grow-a-garden/crops">Toutes les cultures / fruits</a> · <a target="_blank" rel="noopener" href="https://bloxodes.com/wiki/grow-a-garden/crop-mutations">Mutations de fruits</a> · <a target="_blank" rel="noopener" href="https://bloxodes.com/wiki/grow-a-garden/pets">Animaux</a> · <a target="_blank" rel="noopener" href="https://bloxodes.com/wiki/grow-a-garden/eggs">Œufs</a> · <a target="_blank" rel="noopener" href="https://bloxodes.com/wiki/grow-a-garden/gears">Équipements</a> · <a target="_blank" rel="noopener" href="https://bloxodes.com/wiki/grow-a-garden/weather">Météos</a></p>
+  <p><small>Les extensions de terrain achetées dans cette version sont propres à notre jeu ; elles ne sont pas des passes Roblox payants.</small></p>`);
+  document.getElementById('friendsOpen').onclick=openFriendsPanel;
+  document.getElementById('buyExpansion').onclick=buyGardenExpansion;
+  document.querySelectorAll('[data-save-slot]').forEach(b=>b.onclick=()=>saveToSlot(Number(b.dataset.saveSlot)));
+  document.querySelectorAll('[data-load-slot]').forEach(b=>b.onclick=()=>loadFromSlot(Number(b.dataset.loadSlot)));
+}
+
+document.getElementById('mapBtn').onclick=openNotebook;
+function sellHarvest(){
+  if(state.harvest===0){toast('Récolte quelque chose avant de vendre !');return;}
+  const amount=state.harvestValue||state.harvest*20;state.cash+=amount;
+  const old=Math.floor(state.earned/1000);state.earned+=amount;const gained=Math.floor(state.earned/1000)-old;state.gems+=gained;
+  state.harvest=0;state.harvestValue=0;state.harvestItems=[];updateHud();saveGame();toast('Vente : +'+amount.toLocaleString('fr-FR')+' €'+(gained?' et +'+gained+' diamant(s) !':''));
+}
+function interactPlot(p,seedName=selectedSeed){
+  if(!p)return;
+  if(!p.unlocked){toast('🔒 Ce jardin est fermé. Ouvre la MAP pour acheter le terrain.');return;}
+  if(p.stage===0){
+    const name=(seedName&&state.seeds[seedName]>0&&cropInfo[seedName])?seedName:availableSeedNames()[0];
+    if(!name){toast('Achète d’abord une graine dont la durée de pousse est confirmée.');return;}
+    selectedSeed=name;state.seeds[name]--;p.crop=name;p.stage=1;p.mutations=[];p.growStartedAt=Date.now();p.growDuration=cropInfo[name].grow*1000;p.readyAt=p.growStartedAt+p.growDuration;p.lastMutationTryAt=Date.now();
+    makePlant(p,name);toast('🌱 '+name+' plantée ! Pousse : '+formatDuration(cropInfo[name].grow)+'.');
+  }else if(p.stage===1){toast('⏳ '+p.crop+' pousse encore : '+formatDuration((p.readyAt-Date.now())/1000)+' restantes.');}
+  else if(p.stage===2){harvestPlot(p);}
+  updateHud();saveGame();
+}
+function interact(){
+  const spot=nearestService();
+  if(spot){
+    if(spot.type==='seeds')openSeedShop();
+    else if(spot.type==='pets')openPetShop();
+    else {if(network.role==='guest')sendNetwork({type:'command',command:'sell'});else sellHarvest();}
+    return;
+  }
+  const p=nearest();if(!p){toast('Approche-toi d’une parcelle ou d’un comptoir et appuie sur E.');return;}
+  if(network.role==='guest'){sendNetwork({type:'command',command:'plot',plotIndex:plots.indexOf(p),seed:selectedSeed});return;}
+  interactPlot(p);
+}
+document.getElementById('interactBtn').onclick=interact;
+
+function getWeather(now){
+  const elapsed=Math.max(0,now-worldStartedAt),day=Math.floor(elapsed/WORLD_DAY_MS),phase=elapsed%WORLD_DAY_MS;
+  const isNight=phase>=7*60*1000;
+  if(isNight){const roll=seededRoll(day+19);return roll<.13?{key:'BloodMoon',label:'🌕 Lune de sang',time:'Nuit'}:{key:'Night',label:'🌙 Nuit',time:'Nuit'};}
+  const weatherSlot=Math.floor(elapsed/(2*60*1000));const roll=seededRoll(weatherSlot+301);
+  if(roll<.36)return {key:'Clear',label:'☀️ Journée claire',time:'Jour'};
+  if(roll<.59)return {key:'Rain',label:'🌧️ Pluie',time:'Jour'};
+  if(roll<.74)return {key:'Wind',label:'💨 Vent',time:'Jour'};
+  if(roll<.86)return {key:'Frost',label:'❄️ Gel',time:'Jour'};
+  if(roll<.97)return {key:'Storm',label:'⛈️ Orage',time:'Jour'};
+  return {key:'Meteor',label:'☄️ Pluie de météores',time:'Jour'};
+}
+function seededRoll(seed){const x=Math.sin(seed*127.1+311.7)*43758.5453;return x-Math.floor(x);}
+function addCropMutation(p,mutation){
+  if(!p.mutations)p.mutations=[];if(p.mutations.includes(mutation)||p.mutations.length>=3)return false;
+  p.mutations.push(mutation);
+  if(p.mutations.includes('Wet')&&p.mutations.includes('Chilled')){p.mutations=p.mutations.filter(x=>x!=='Wet'&&x!=='Chilled');p.mutations.push('Frozen');}
+  applyPlantMutationVisual(p);updatePlotLabel(p);saveGame();
+  toast('✨ Chance ! '+p.crop+' a obtenu la mutation '+cropMutationLabel(p)+' !');return true;
+}
+function updateWorld(now){
+  if(now<nextWeatherCheckAt)return;nextWeatherCheckAt=now+1000;
+  const weather=getWeather(now);const previousWeather=currentWeatherKey;currentWeatherKey=weather.key;currentWeather=weather.label;currentGameTime=weather.time;
+  if(previousWeather!==currentWeatherKey){
+    const sky={Clear:0x8bd7f5,Night:0x17294d,BloodMoon:0x431d35,Rain:0x789cb1,Wind:0x9ccbd2,Frost:0xb9d7e7,Storm:0x48566e,Meteor:0x252b4c};
+    const tint=sky[currentWeatherKey]||0x8bd7f5;scene.background=new THREE.Color(tint);scene.fog.color.setHex(tint);
+    sun.intensity=(currentWeatherKey==='Night'||currentWeatherKey==='BloodMoon'||currentWeatherKey==='Meteor')?.42:(currentWeatherKey==='Storm'||currentWeatherKey==='Rain')?1.05:2.1;
+    fillLight.intensity=(currentWeatherKey==='Night'||currentWeatherKey==='BloodMoon'||currentWeatherKey==='Meteor')?.85:.55;
+    if(currentWeatherKey==='BloodMoon')sun.color.setHex(0xff6767);else if(currentWeatherKey==='Night'||currentWeatherKey==='Meteor')sun.color.setHex(0x9bb7ff);else sun.color.setHex(0xfff0cf);
+  }
+  const weatherEl=document.getElementById('weatherStatus');if(weatherEl)weatherEl.textContent=currentWeather+' · '+currentGameTime;
+  // Mutations rares : à chaque période, le jardin fait un seul tirage de chance.
+  // Le résultat peut être « aucune mutation ». Si une mutation sort, une seule plante est choisie au hasard.
+  if(now>=nextMutationSweepAt){
+    nextMutationSweepAt=now+120000;
+    const candidates=plots.filter(p=>p.stage>0&&p.crop&&cropInfo[p.crop]&&(!p.mutations||p.mutations.length<3));
+    const eventByWeather={
+      Night:{mutation:'Moonlit',chance:.14},
+      BloodMoon:{mutation:'Bloodlit',chance:.09},
+      Rain:{mutation:'Wet',chance:.20},
+      Wind:{mutation:'Windstruck',chance:.16},
+      Frost:{mutation:'Chilled',chance:.13},
+      Storm:{mutation:'Shocked',chance:.045},
+      Meteor:{mutation:'Celestial',chance:.025}
+    };
+    const event=eventByWeather[weather.key];
+    if(event&&candidates.length&&Math.random()<event.chance){
+      const eligible=candidates.filter(p=>!p.mutations?.includes(event.mutation));
+      if(eligible.length){
+        const luckyPlant=eligible[Math.floor(Math.random()*eligible.length)];
+        addCropMutation(luckyPlant,event.mutation);
+      }
+    }
+  }
+}
+function updateCropTimers(now){
+  for(const p of plots){
+    if(!p.stage||!p.crop||!p.readyAt)continue;
+    if(p.stage===1&&now>=p.readyAt){p.stage=2;if(p.obj)p.obj.scale.setScalar(1);if(p.fruitMesh)p.fruitMesh.visible=true;updatePlotLabel(p);toast('🌾 '+p.crop+' est mûr ! Appuie sur E pour récolter.');saveGame();}
+    else if(p.stage===1&&p.obj){const progress=Math.max(0,Math.min(1,1-(p.readyAt-now)/Math.max(1000,p.growDuration||1)));p.obj.scale.setScalar(.22+progress*.78);updatePlotLabel(p,false);}
+  }
+}
+function harvestPlot(p){
+  const info=cropInfo[p.crop]||{value:20,weight:1,multi:false};
+  const weight=info.weight*(.85+Math.random()*.30);const weightBonus=Math.pow(weight/info.weight,2);
+  const multiplier=cropMutationMultiplier(p);const amount=Math.max(1,Math.round(info.value*weightBonus*multiplier));
+  const mutations=cropMutationLabel(p);state.harvest++;state.harvestValue+=amount;state.harvestItems.push({name:p.crop,value:amount,mutations,weight});
+  toast('🌻 '+p.crop+' récolté : +'+amount.toLocaleString('fr-FR')+' €'+(mutations?' · '+mutations:' · sans mutation'));
+  // Toutes les cultures ne donnent qu'une récolte par plantation.
+  if(p.obj)scene.remove(p.obj);if(p.timerSprite)scene.remove(p.timerSprite);
+  const idx=animatedPlants.findIndex(a=>a.group===p.obj);if(idx>=0)animatedPlants.splice(idx,1);
+  p.stage=0;p.crop=null;p.obj=null;p.fruitMesh=null;p.timerSprite=null;p.readyAt=0;p.growStartedAt=0;p.growDuration=0;p.mutations=[];p.lastMutationTryAt=0;
+  updateHud();saveGame();
+}
+// Écran de chargement automatique de cinq secondes
+const loadFill=document.getElementById('loadingFill');
+const loadPercent=document.getElementById('loadingPercent');
+const loadText=document.getElementById('loadingText');
+const loadStarted=performance.now();
+function loadingStep(now){
+  const progress=Math.min(100,Math.floor((now-loadStarted)/5000*100));
+  loadFill.style.width=progress+'%'; loadPercent.textContent=progress+' %';
+  if(progress<100){requestAnimationFrame(loadingStep);}
+  else {loadText.textContent='Jardin prêt !';document.getElementById('loadingArea').style.display='none';document.getElementById('readyArea').style.display='block';}
+}
+requestAnimationFrame(loadingStep);
+
+// Petite musique originale en boucle, générée directement dans le jeu
+let audioCtx=null, musicTimer=null, musicOn=false, noteIndex=0;
+function startMusic(){
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+  if(!audioCtx)audioCtx=new AC(); if(audioCtx.state==='suspended')audioCtx.resume();
+  musicOn=true;document.getElementById('musicBtn').textContent='🔊 Musique';
+  const notes=[261.63,329.63,392,329.63,293.66,349.23,440,349.23,261.63,329.63,392,523.25,440,392,329.63,293.66];
+  if(musicTimer)clearInterval(musicTimer);
+  musicTimer=setInterval(()=>{
+    if(!musicOn||!audioCtx)return;
+    const t=audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.type='sine';osc.frequency.value=notes[noteIndex%notes.length];
+    gain.gain.setValueAtTime(.0001,t);gain.gain.exponentialRampToValueAtTime(.045,t+.08);gain.gain.exponentialRampToValueAtTime(.0001,t+.85);
+    osc.connect(gain);gain.connect(audioCtx.destination);osc.start(t);osc.stop(t+.9);
+    noteIndex++;
+  },620);
+}
+document.getElementById('musicBtn').onclick=()=>{
+  musicOn=!musicOn;
+  if(musicOn){startMusic();}
+  else{if(musicTimer)clearInterval(musicTimer);document.getElementById('musicBtn').textContent='🔇 Musique';}
+};
+document.getElementById('play').onclick=()=>{
+  document.getElementById('start').style.display='none';
+  document.getElementById('musicBtn').style.display='block';
+  startMusic();
+  // Pas de clic maintenu ni de capture du pointeur : la position de la souris pilote la caméra.
+  resetMouseSteering();updateCameraHint();
+};
+function animate(){
+ requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.04),t=clock.elapsedTime;
+ pollGamepad();updateWorld(Date.now());updateCropTimers(Date.now());networkTick(Date.now());
+ if(document.getElementById('start').style.display==='none'&&document.getElementById('panel').style.display!=='block'){yaw+=(mouseSteerX*2.35+gamepadLookX*2.35)*dt;pitch+=(mouseSteerY*1.15+gamepadLookY*1.55)*dt;pitch=Math.max(-.72,Math.min(.9,pitch));}
+ const forward=(keys['w']||keys['z']?1:0)-(keys['s']?1:0)-gamepadMoveY,side=(keys['d']?1:0)-(keys['a']||keys['q']?1:0)+gamepadMoveX,speed=(keys['shift']||gamepadSprint)?29:20;
+ let dx=Math.sin(yaw)*forward+Math.cos(yaw)*side,dz=-Math.cos(yaw)*forward+Math.sin(yaw)*side;const moving=Math.hypot(dx,dz)>.01;
+ if(moving){const len=Math.hypot(dx,dz);movePlayer(dx/len*speed*dt,dz/len*speed*dt)}
+ if(keys[' ']&&onGround){vy=7;onGround=false}vy-=18*dt;player.position.y+=vy*dt;if(player.position.y<0){player.position.y=0;vy=0;onGround=true}
+ player.rotation.y=yaw;const sprinting=!!(keys['shift']||gamepadSprint);const stride=moving?Math.sin(t*(sprinting?25:17))*(sprinting?.78:.66):0;armL.rotation.x=stride;armR.rotation.x=-stride;legL.rotation.x=-stride*.75;legR.rotation.x=stride*.75;body.position.y=.9+(moving?Math.abs(Math.sin(t*(sprinting?25:17)))*.075:Math.sin(t*2)*.018);head.position.y=1.7+(moving?Math.abs(Math.sin(t*(sprinting?25:17)))*.05:0);
+ animatedTrees.forEach(a=>{a.group.rotation.z=Math.sin(t*1.05+a.phase)*.035;a.group.rotation.x=Math.cos(t*.8+a.phase)*.025});
+ animatedPlants.forEach(a=>{a.group.rotation.z=Math.sin(t*1.65+a.phase)*.09;a.group.rotation.x=Math.cos(t*1.15+a.phase)*.035;if(a.fruitGroup){a.fruitGroup.rotation.y=Math.sin(t*1.0+a.phase)*.08;a.fruitGroup.position.y=1.45+Math.sin(t*2.0+a.phase)*.035;}if(a.leafPivots)a.leafPivots.forEach((leaf,i)=>{leaf.rotation.z=Math.sin(t*1.7+a.phase+i*.7)*.10;});});
+ waterSheen.material.opacity=.035+.025*(.5+.5*Math.sin(t*.65));
+ animatedClouds.forEach(a=>{a.group.position.x+=dt*.38;if(a.group.position.x>55)a.group.position.x=-55;a.group.position.y+=Math.sin(t*.45+a.phase)*.0015});
+ sparkles.forEach(a=>{a.mesh.position.y=a.baseY+Math.sin(t*2+a.phase)*.28;a.mesh.position.x+=Math.sin(t*.7+a.phase)*dt*.08;a.mesh.material.opacity=.65+.35*Math.sin(t*3+a.phase) });
+ const target=new THREE.Vector3(player.position.x,player.position.y+1.48,player.position.z);
+ const back=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch)+.18,Math.cos(yaw)*Math.cos(pitch));
+ const desired=target.clone().addScaledVector(back,cameraDistance);camera.position.lerp(desired,1-Math.exp(-9*dt));camera.lookAt(target);
+ renderer.render(scene,camera)
+}
+const clock=new THREE.Clock();const restored=loadGame();updateGardenAccess();updateHud();updateWorld(Date.now());updateCropTimers(Date.now());if(restored)toast('💾 Ta dernière partie a été restaurée. Les cultures ont continué à pousser !');updateCameraHint();animate();
+// Sauvegarde régulière + au moment où l'onglet ou la fenêtre se ferme.
+setInterval(saveGame,1000);window.addEventListener('beforeunload',saveGame);window.addEventListener('pagehide',saveGame);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveGame();});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+})();
+</script></body></html>
